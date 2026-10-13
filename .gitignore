@@ -1,0 +1,62 @@
+# ─── generated data ────────────────────────────────────────────────────────
+# faultlines_project/data/ is about 300 MB: 170,364 graded answers per arm, an 84 MB
+# embedding matrix, and 340,728 quarantined generations. Regenerate with the
+# pipeline; never commit it. (faultlines_project/.gitignore also covers this.)
+faultlines_project/data/
+
+# ─── DO NOT ignore the tool's payload ──────────────────────────────────────
+# faultlines-tool/data.json is 2.33 MB and MUST be committed: Vercel builds from
+# this repo and the tool cannot load without it. It lives OUTSIDE
+# faultlines_project/, so the rule above does not touch it. Stated here because
+# adding a blanket *.json rule later would silently break the deployment.
+!faultlines-tool/data.json
+
+# ─── env / secrets ─────────────────────────────────────────────────────────
+# The DeepInfra + Together keys live in ~/.faultlines.env, outside the tree.
+# config.yaml stores only variable NAMES, never values. Keep it that way.
+.env
+.env.*
+*.key
+*.pem
+
+# ─── python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ─── vercel / editors / os ─────────────────────────────────────────────────
+.vercel
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Word/PowerPoint lock files, which OneDrive creates constantly
+~$*
+
+.vercel
+writeup/FaultLines_thesis.pdf
+
+# generated submission artifacts — rebuild with scripts/build_thesis_docx.py
+writeup/FaultLines_thesis_SFSU.docx
+writeup/_sfsu_template.docx
+
+# Office documents are deliverables, not source. They are generated from the
+# markdown in writeup/ and from build scripts, they diff as binary blobs, and
+# every rebuild rewrites the whole file. Kept on disk, out of the repo.
+*.docx
+*.doc
+*.pptx
+*.ppt
+*.xlsx
+~$*
+
+# Figures are screenshots of the deployed tool -- an output, not a source.
+# Rebuild them with: python scripts/capture_figures.py
+writeup/figures/
+writeup/FaultLines_thesis.html
+writeup/TABLE_TITLES_TO_FIX.md

@@ -1,0 +1,1021 @@
+{
+ "signal": {
+  "overall": {
+   "auc": 0.84,
+   "auc_weighted": 0.844,
+   "base": 0.4108,
+   "silent": 950,
+   "n": 34062
+  },
+  "by_dataset": [
+   {
+    "dataset": "popqa",
+    "auc": 0.793,
+    "auc_weighted": 0.796,
+    "base": 0.549,
+    "silent": 439,
+    "n": 13760
+   },
+   {
+    "dataset": "triviaqa",
+    "auc": 0.861,
+    "auc_weighted": 0.867,
+    "base": 0.1357,
+    "silent": 140,
+    "n": 9962
+   },
+   {
+    "dataset": "halueval",
+    "auc": 0.81,
+    "auc_weighted": 0.816,
+    "base": 0.5029,
+    "silent": 366,
+    "n": 10000
+   },
+   {
+    "dataset": "truthfulqa",
+    "auc": 0.683,
+    "auc_weighted": 0.687,
+    "base": 0.1676,
+    "silent": 5,
+    "n": 340
+   }
+  ]
+ },
+ "baseline": {
+  "single_model": [
+   {
+    "model": "Mistral-Small-3.2",
+    "auc": 0.778
+   },
+   {
+    "model": "Qwen3-235B",
+    "auc": 0.761
+   },
+   {
+    "model": "Llama-4-Maverick",
+    "auc": 0.68
+   },
+   {
+    "model": "Gemma-3-27B",
+    "auc": 0.649
+   }
+  ],
+  "cross_model_same_qids": 0.838,
+  "n": 6436
+ },
+ "rq4": {
+  "by_cause": [
+   {
+    "cause": "obscurity",
+    "n": 500,
+    "closedbook": 0.072,
+    "retrieved": 0.724,
+    "lift": 0.652
+   },
+   {
+    "cause": "misconception",
+    "n": 57,
+    "closedbook": 0.246,
+    "retrieved": 0.386,
+    "lift": 0.14
+   }
+  ]
+ },
+ "rq5": {
+  "matched": 136,
+  "wiki": 39,
+  "web": 41,
+  "wiki_rate": 0.287,
+  "web_rate": 0.301,
+  "neither": 88,
+  "neither_rate": 0.647,
+  "both": 32,
+  "web_only": 9,
+  "wiki_only": 7,
+  "wiki_arm_n": 948,
+  "web_arm_n": 136
+ },
+ "funnel": {
+  "total": 34062,
+  "any_wrong": 21734,
+  "majority_wrong": 13992,
+  "all_wrong": 10819,
+  "unanimous": 12181,
+  "silent": 950
+ },
+ "intervals": {
+  "auc": {
+   "auc": 0.8403,
+   "lo": 0.8358,
+   "hi": 0.8448,
+   "test": "Hanley-McNeil"
+  },
+  "auc_by_dataset": [
+   {
+    "dataset": "popqa",
+    "n": 13760,
+    "auc": 0.793,
+    "lo": 0.786,
+    "hi": 0.8,
+    "width": 0.015
+   },
+   {
+    "dataset": "triviaqa",
+    "n": 9962,
+    "auc": 0.861,
+    "lo": 0.848,
+    "hi": 0.874,
+    "width": 0.026
+   },
+   {
+    "dataset": "halueval",
+    "n": 10000,
+    "auc": 0.81,
+    "lo": 0.802,
+    "hi": 0.819,
+    "width": 0.017
+   },
+   {
+    "dataset": "truthfulqa",
+    "n": 340,
+    "auc": 0.683,
+    "lo": 0.601,
+    "hi": 0.764,
+    "width": 0.163
+   }
+  ],
+  "vs_semantic_entropy": {
+   "model": "Mistral-Small-3.2",
+   "n": 6436,
+   "delta": 0.06,
+   "lo": 0.0504,
+   "hi": 0.0701,
+   "p_le_0": 0.0,
+   "test": "paired bootstrap, 4000 resamples"
+  },
+  "blind_rate": {
+   "k": 950,
+   "n": 34062,
+   "rate": 0.02789,
+   "lo": 0.02619,
+   "hi": 0.02969,
+   "test": "Wilson"
+  },
+  "share_ratio": {
+   "share_2024": 0.0452,
+   "share_2025": 0.0679,
+   "ratio": 1.502,
+   "lo": 1.3946,
+   "hi": 1.6156,
+   "p_le_1": 0.0,
+   "test": "paired bootstrap, 4000 resamples"
+  },
+  "blind_rise": {
+   "from": 0.02416,
+   "to": 0.02789,
+   "delta": 0.00373,
+   "lo": 0.00179,
+   "hi": 0.00566,
+   "p": 0.0001790284841115007,
+   "healed": 503,
+   "emerged": 630,
+   "test": "McNemar exact"
+  },
+  "rq4": {
+   "misconception": {
+    "n": 57,
+    "lift": 0.14035,
+    "lo": 0.00772,
+    "hi": 0.27298,
+    "p": 0.076812744140625
+   },
+   "obscurity": {
+    "n": 500,
+    "lift": 0.652,
+    "lo": 0.60845,
+    "hi": 0.69555,
+    "p": 5.024038795393544e-91
+   },
+   "dissociation": {
+    "delta": 0.51165,
+    "lo": 0.36884,
+    "hi": 0.65337,
+    "p_le_0": 0.0,
+    "test": "10,000 bootstrap"
+   }
+  },
+  "rq5": {
+   "neither": 88,
+   "matched": 136,
+   "rate": 0.6471,
+   "lo": 0.56371,
+   "hi": 0.72233,
+   "web_minus_wiki": 0.01471,
+   "wd_lo": -0.04289,
+   "wd_hi": 0.0723,
+   "wd_p": 0.803619384765625
+  },
+  "rq1": {
+   "auc": 0.5925,
+   "lo": 0.573,
+   "hi": 0.612,
+   "z": 9.5,
+   "mw_p": 6.118748743584647e-23,
+   "cohen_d": 0.5
+  },
+  "abstain_table": {
+   "base": 0.0837,
+   "rows": [
+    {
+     "t": 0.9,
+     "abstains": 1233,
+     "caught": 238,
+     "caught_pct": 0.233,
+     "lost": 995,
+     "lost_pct": 0.089,
+     "precision": 0.193,
+     "lift": 2.31
+    },
+    {
+     "t": 0.941,
+     "abstains": 4268,
+     "caught": 510,
+     "caught_pct": 0.5,
+     "lost": 3758,
+     "lost_pct": 0.337,
+     "precision": 0.119,
+     "lift": 1.43
+    },
+    {
+     "t": 0.97,
+     "abstains": 8914,
+     "caught": 788,
+     "caught_pct": 0.773,
+     "lost": 8126,
+     "lost_pct": 0.728,
+     "precision": 0.088,
+     "lift": 1.06
+    }
+   ]
+  },
+  "concordance": {
+   "ratio": 3.3217,
+   "lo": 3.2432,
+   "hi": 3.4051,
+   "test": "2,000 bootstrap, resampled within dataset"
+  }
+ },
+ "abstain": {
+  "n": 12181,
+  "n_wrong": 1020,
+  "n_right": 11161,
+  "conf_right": 0.947,
+  "conf_wrong": 0.929,
+  "curve": [
+   {
+    "t": 0.8,
+    "caught": 0.026,
+    "lost": 0.003
+   },
+   {
+    "t": 0.9,
+    "caught": 0.233,
+    "lost": 0.089
+   },
+   {
+    "t": 0.95,
+    "caught": 0.562,
+    "lost": 0.442
+   },
+   {
+    "t": 0.97,
+    "caught": 0.773,
+    "lost": 0.728
+   },
+   {
+    "t": 0.99,
+    "caught": 0.962,
+    "lost": 0.961
+   }
+  ],
+  "targets": [
+   {
+    "target": 0.5,
+    "t": 0.941,
+    "lost": 0.337
+   },
+   {
+    "target": 0.8,
+    "t": 0.973,
+    "lost": 0.768
+   }
+  ]
+ },
+ "rq1": {
+  "agree_auc": 0.592,
+  "agree_n": 12181
+ },
+ "rq2": {
+  "corr_pop": -0.287,
+  "corr_density": 0.277,
+  "corr_density_within": 0.303,
+  "n": 13760,
+  "subset": "popqa",
+  "auc_pop": 0.653,
+  "auc_pop_density": 0.726,
+  "auc_pop_density_within": 0.741,
+  "auc_density_within": 0.662,
+  "neighbour_mix": 0.253,
+  "auc_density_map_all": 0.674
+ },
+ "rq3": {
+  "rates": [
+   {
+    "gen": "2024",
+    "wrong": 0.5345,
+    "blind": 0.0242,
+    "share": 0.0452
+   },
+   {
+    "gen": "2025",
+    "wrong": 0.4108,
+    "blind": 0.0279,
+    "share": 0.0679
+   }
+  ],
+  "gen2_silent": 823,
+  "gen3_silent": 950,
+  "persisted": 320,
+  "healed": 503,
+  "emerged": 630,
+  "emerged_was_allwrong": 505,
+  "healed_allwrong": 280,
+  "healed_ens_wrong": 406,
+  "persistence": 0.389,
+  "inherited": 0.337
+ },
+ "independence": {
+  "n": 34062,
+  "stratified": {
+   "observed": 10819,
+   "expected": 3257.1,
+   "ratio": 3.32,
+   "phi_min": 0.4367,
+   "phi_max": 0.6024,
+   "by_dataset": [
+    {
+     "dataset": "popqa",
+     "n": 13760,
+     "all_wrong": 0.45494,
+     "all_wrong_if_independent": 0.16307,
+     "ratio": 2.79,
+     "phi_mean": 0.6024
+    },
+    {
+     "dataset": "triviaqa",
+     "n": 9962,
+     "all_wrong": 0.08,
+     "all_wrong_if_independent": 0.00119,
+     "ratio": 67.35,
+     "phi_mean": 0.575
+    },
+    {
+     "dataset": "halueval",
+     "n": 10000,
+     "all_wrong": 0.3739,
+     "all_wrong_if_independent": 0.10009,
+     "ratio": 3.74,
+     "phi_mean": 0.5986
+    },
+    {
+     "dataset": "truthfulqa",
+     "n": 340,
+     "all_wrong": 0.06765,
+     "all_wrong_if_independent": 0.00151,
+     "ratio": 44.86,
+     "phi_mean": 0.4367
+    }
+   ]
+  },
+  "models": [
+   "Qwen3-235B",
+   "Gemma-3-27B",
+   "Llama-4-Maverick",
+   "Mistral-Small-3.2"
+  ],
+  "error_rates": {
+   "Qwen3-235B": 0.43958,
+   "Gemma-3-27B": 0.5268,
+   "Llama-4-Maverick": 0.44084,
+   "Mistral-Small-3.2": 0.51348
+  },
+  "pairs": [
+   {
+    "a": "Qwen3-235B",
+    "b": "Gemma-3-27B",
+    "phi": 0.6372
+   },
+   {
+    "a": "Qwen3-235B",
+    "b": "Llama-4-Maverick",
+    "phi": 0.6475
+   },
+   {
+    "a": "Qwen3-235B",
+    "b": "Mistral-Small-3.2",
+    "phi": 0.6602
+   },
+   {
+    "a": "Gemma-3-27B",
+    "b": "Llama-4-Maverick",
+    "phi": 0.6363
+   },
+   {
+    "a": "Gemma-3-27B",
+    "b": "Mistral-Small-3.2",
+    "phi": 0.695
+   },
+   {
+    "a": "Llama-4-Maverick",
+    "b": "Mistral-Small-3.2",
+    "phi": 0.645
+   }
+  ],
+  "phi_mean": 0.65352,
+  "all_wrong": 0.31763,
+  "all_wrong_if_independent": 0.05242,
+  "ratio": 6.06
+ },
+ "ablation": {
+  "n_ensembles": 154,
+  "by_size_2025": [
+   {
+    "k": 2,
+    "n": 6,
+    "silent": 0.075064,
+    "lo": 0.071252,
+    "hi": 0.088368,
+    "auc": 0.78
+   },
+   {
+    "k": 3,
+    "n": 4,
+    "silent": 0.040118,
+    "lo": 0.038606,
+    "hi": 0.041835,
+    "auc": 0.828
+   },
+   {
+    "k": 4,
+    "n": 1,
+    "silent": 0.02789,
+    "lo": 0.02789,
+    "hi": 0.02789,
+    "auc": 0.8403
+   }
+  ],
+  "by_size_all": [
+   {
+    "k": 2,
+    "n": 28,
+    "silent": 0.073177,
+    "lo": 0.045858,
+    "hi": 0.103605,
+    "auc": 0.7557
+   },
+   {
+    "k": 3,
+    "n": 56,
+    "silent": 0.035992,
+    "lo": 0.022224,
+    "hi": 0.053197,
+    "auc": 0.8096
+   },
+   {
+    "k": 4,
+    "n": 70,
+    "silent": 0.023318,
+    "lo": 0.015677,
+    "hi": 0.034408,
+    "auc": 0.8258
+   }
+  ],
+  "phi_silent": [
+   {
+    "k": 2,
+    "r": 0.871
+   },
+   {
+    "k": 3,
+    "r": 0.91
+   },
+   {
+    "k": 4,
+    "r": 0.922
+   }
+  ],
+  "err_silent": [
+   {
+    "k": 2,
+    "r": -0.025
+   },
+   {
+    "k": 3,
+    "r": -0.218
+   },
+   {
+    "k": 4,
+    "r": -0.336
+   }
+  ],
+  "phi_auc": [
+   {
+    "k": 2,
+    "r": 0.927
+   },
+   {
+    "k": 3,
+    "r": 0.729
+   },
+   {
+    "k": 4,
+    "r": 0.611
+   }
+  ],
+  "phi_err": [
+   {
+    "k": 2,
+    "r": -0.237
+   },
+   {
+    "k": 3,
+    "r": -0.253
+   },
+   {
+    "k": 4,
+    "r": -0.259
+   }
+  ],
+  "phi_silent_partial": [
+   {
+    "k": 2,
+    "r": 0.891
+   },
+   {
+    "k": 3,
+    "r": 0.906
+   },
+   {
+    "k": 4,
+    "r": 0.918
+   }
+  ],
+  "phi_auc_partial": [
+   {
+    "k": 2,
+    "r": 0.922
+   },
+   {
+    "k": 3,
+    "r": 0.748
+   },
+   {
+    "k": 4,
+    "r": 0.642
+   }
+  ]
+ },
+ "rq1b": {
+  "base": 0.0837,
+  "conf_auc": 0.5917,
+  "best_auc": 0.7718,
+  "best_features": "+ popularity",
+  "conf_risk50": 0.0681,
+  "best_risk50": 0.03,
+  "best_risk25": 0.021
+ },
+ "belief": {
+  "abstain": {
+   "n_blind": 950,
+   "n_control": 317,
+   "repaired": 0.0,
+   "repaired_n": 0,
+   "broke": 0.1073,
+   "broke_n": 34,
+   "broke_strict": 0.0095,
+   "broke_strict_n": 3,
+   "ties_blind": 2,
+   "ties_control": 31,
+   "repaired_hi": 0.004,
+   "abstain_blind": 0.550526,
+   "abstain_control": 0.283912,
+   "abstain_blind_ci": [
+    0.5188,
+    0.5819
+   ],
+   "abstain_control_ci": [
+    0.2371,
+    0.3359
+   ],
+   "abstain_fisher_p": 8.954997188332176e-17,
+   "abstain_ratio": 1.94
+  },
+  "counter": {
+   "n_blind": 950,
+   "n_control": 317,
+   "repaired": 0.0074,
+   "repaired_n": 7,
+   "broke": 0.0379,
+   "broke_n": 12,
+   "broke_strict": 0.0063,
+   "broke_strict_n": 2,
+   "ties_blind": 17,
+   "ties_control": 10,
+   "repaired_hi": 0.0151,
+   "abstain_blind": 0.0,
+   "abstain_control": 0.0
+  }
+ },
+ "artifact": {
+  "n_judged": 950,
+  "n_total": 950,
+  "undecided": 0,
+  "rate": 0.2105,
+  "lo": 0.1858,
+  "hi": 0.2376,
+  "genuine": 750,
+  "by_dataset": [
+   {
+    "dataset": "halueval",
+    "n": 366,
+    "rate": 0.3388
+   },
+   {
+    "dataset": "popqa",
+    "n": 439,
+    "rate": 0.0615
+   },
+   {
+    "dataset": "triviaqa",
+    "n": 140,
+    "rate": 0.3357
+   },
+   {
+    "dataset": "truthfulqa",
+    "n": 5,
+    "rate": 0.4
+   }
+  ],
+  "judge_precision": 0.9459,
+  "judge_precision_k": 35,
+  "judge_precision_n": 37,
+  "judge_misses": 0.0893,
+  "judge_misses_k": 5,
+  "judge_misses_n": 56
+ },
+ "irr": {
+  "annotators": [
+   {
+    "annotator": "Devesh",
+    "labelled": 115,
+    "kappa": 0.97,
+    "lo": 0.924,
+    "hi": 1.0,
+    "agreement": 0.9898,
+    "n_compared": 84,
+    "population": 430,
+    "unclear": 0.191
+   }
+  ],
+  "kappa": 0.97,
+  "strata": {
+   "reliability": 385,
+   "disputed": 45
+  }
+ },
+ "writeup": {
+  "chapters": [
+   {
+    "n": "1",
+    "title": "Introduction",
+    "words": 3339,
+    "target": 2500,
+    "people": false,
+    "state": "drafted"
+   },
+   {
+    "n": "2",
+    "title": "Related work",
+    "words": 6554,
+    "target": 5000,
+    "people": false,
+    "state": "drafted"
+   },
+   {
+    "n": "3",
+    "title": "Design",
+    "words": 7085,
+    "target": 6000,
+    "people": false,
+    "state": "drafted"
+   },
+   {
+    "n": "4",
+    "title": "Method",
+    "words": 8254,
+    "target": 5000,
+    "people": false,
+    "state": "drafted"
+   },
+   {
+    "n": "5",
+    "title": "Results",
+    "words": 9660,
+    "target": 8000,
+    "people": false,
+    "state": "drafted"
+   },
+   {
+    "n": "6",
+    "title": "Evaluation",
+    "words": 5792,
+    "target": 4000,
+    "people": false,
+    "state": "drafted"
+   },
+   {
+    "n": "7",
+    "title": "Limitations",
+    "words": 7665,
+    "target": 3500,
+    "people": false,
+    "state": "drafted"
+   },
+   {
+    "n": "8",
+    "title": "Conclusion",
+    "words": 2368,
+    "target": 1500,
+    "people": false,
+    "state": "drafted"
+   }
+  ],
+  "words": 50717,
+  "target": 35500,
+  "drafted": 8,
+  "total": 8
+ },
+ "adjudicator": {
+  "n": 430,
+  "human_judge": 0.782,
+  "human_machine": 0.459,
+  "judge_machine": 0.354,
+  "self_own": 0.816,
+  "self_other": 0.771,
+  "disagreements": 29
+ },
+ "corpus": {
+  "asked": 42591,
+  "analysed": 34062,
+  "duplicates": 8489,
+  "generations": 136248,
+  "models_new": [
+   "Qwen3-235B",
+   "Gemma-3-27B",
+   "Llama-4-Maverick",
+   "Mistral-Small-3.2"
+  ],
+  "models_old": [
+   "Gemma-2-9B",
+   "Llama-3.1-8B",
+   "Mistral-7B",
+   "Qwen2.5-7B"
+  ]
+ },
+ "datasets": [
+  "popqa",
+  "triviaqa",
+  "halueval",
+  "truthfulqa"
+ ],
+ "keyflags": 54,
+ "defects": 78,
+ "handlabels": 430,
+ "grader_check": {
+  "stratum": "target",
+  "judged": 244,
+  "generous": 31,
+  "harsh": 39
+ },
+ "walk": {
+  "base": 0.0279,
+  "patterns": [
+   {
+    "name": "director of X",
+    "n": 2002,
+    "blind": 105,
+    "rate": 0.0524,
+    "wrong": 0.6239,
+    "unanimous": 0.1688
+   },
+   {
+    "name": "genre of X",
+    "n": 1596,
+    "blind": 70,
+    "rate": 0.0439,
+    "wrong": 0.6648,
+    "unanimous": 0.1303
+   },
+   {
+    "name": "author of X",
+    "n": 1495,
+    "blind": 59,
+    "rate": 0.0395,
+    "wrong": 0.5538,
+    "unanimous": 0.2194
+   },
+   {
+    "name": "crew role of X",
+    "n": 4197,
+    "blind": 76,
+    "rate": 0.0181,
+    "wrong": 0.6905,
+    "unanimous": 0.0805
+   },
+   {
+    "name": "birthplace of X",
+    "n": 585,
+    "blind": 24,
+    "rate": 0.041,
+    "wrong": 0.6393,
+    "unanimous": 0.1419
+   },
+   {
+    "name": "capital of X",
+    "n": 656,
+    "blind": 10,
+    "rate": 0.0152,
+    "wrong": 0.1082,
+    "unanimous": 0.7317
+   }
+  ],
+  "director": {
+   "unique": {
+    "n": 508,
+    "rate": 0.0098
+   },
+   "shared": {
+    "n": 1472,
+    "rate": 0.0679
+   }
+  },
+  "emerged": {
+   "n": 630,
+   "already_allwrong": 505,
+   "had_correct": 22
+  }
+ },
+ "arms": {
+  "judges": [
+   {
+    "key": "qwen",
+    "label": "Qwen3-235B",
+    "in_ensemble": true,
+    "arm": {
+     "2024": {
+      "n": 823,
+      "artifacts": 125,
+      "rate": 0.1519,
+      "lo": 0.129,
+      "hi": 0.178,
+      "genuine": 698,
+      "unclear": 0
+     },
+     "2025": {
+      "n": 950,
+      "artifacts": 200,
+      "rate": 0.2105,
+      "lo": 0.1858,
+      "hi": 0.2376,
+      "genuine": 750,
+      "unclear": 0
+     }
+    },
+    "gap": 0.0586,
+    "p_gap": 0.00146,
+    "by_dataset": {
+     "halueval": {
+      "n_2024": 295,
+      "n_2025": 366,
+      "rate_2024": 0.2746,
+      "rate_2025": 0.3388,
+      "p": 0.076
+     },
+     "popqa": {
+      "n_2024": 404,
+      "n_2025": 439,
+      "rate_2024": 0.0322,
+      "rate_2025": 0.0615,
+      "p": 0.0454
+     },
+     "triviaqa": {
+      "n_2024": 117,
+      "n_2025": 140,
+      "rate_2024": 0.2479,
+      "rate_2025": 0.3357,
+      "p": 0.1243
+     },
+     "truthfulqa": {
+      "n_2024": 7,
+      "n_2025": 5,
+      "rate_2024": 0.2857,
+      "rate_2025": 0.4,
+      "p": 0.6788
+     }
+    },
+    "rq3": {
+     "persisted": 239,
+     "healed": 459,
+     "emerged": 511,
+     "ratio": 2.13808,
+     "p_growth": 0.10147
+    },
+    "genuine": {
+     "2024": 698,
+     "2025": 750
+    }
+   },
+   {
+    "key": "olmo",
+    "label": "Olmo-3.1-32B",
+    "in_ensemble": false,
+    "arm": {
+     "2024": {
+      "n": 823,
+      "artifacts": 145,
+      "rate": 0.1762,
+      "lo": 0.1517,
+      "hi": 0.2037,
+      "genuine": 678,
+      "unclear": 1
+     },
+     "2025": {
+      "n": 950,
+      "artifacts": 234,
+      "rate": 0.2463,
+      "lo": 0.22,
+      "hi": 0.2747,
+      "genuine": 716,
+      "unclear": 1
+     }
+    },
+    "gap": 0.0701,
+    "p_gap": 0.00033,
+    "by_dataset": {
+     "halueval": {
+      "n_2024": 295,
+      "n_2025": 366,
+      "rate_2024": 0.2983,
+      "rate_2025": 0.3825,
+      "p": 0.0236
+     },
+     "popqa": {
+      "n_2024": 404,
+      "n_2025": 439,
+      "rate_2024": 0.052,
+      "rate_2025": 0.0774,
+      "p": 0.1347
+     },
+     "triviaqa": {
+      "n_2024": 117,
+      "n_2025": 140,
+      "rate_2024": 0.2906,
+      "rate_2025": 0.4143,
+      "p": 0.0394
+     },
+     "truthfulqa": {
+      "n_2024": 7,
+      "n_2025": 5,
+      "rate_2024": 0.2857,
+      "rate_2025": 0.4,
+      "p": 0.6788
+     }
+    },
+    "rq3": {
+     "persisted": 231,
+     "healed": 447,
+     "emerged": 485,
+     "ratio": 2.09957,
+     "p_growth": 0.2255
+    },
+    "genuine": {
+     "2024": 678,
+     "2025": 716
+    }
+   }
+  ],
+  "primary": "qwen"
+ },
+ "tests": 70
+}

@@ -1,0 +1,1743 @@
+<meta charset="utf-8">
+<title>FaultLines — the pipeline, level by level</title>
+
+<style>
+  /* Treatment follows the Dive-Deeper-into-Supervised-Learning web app: deep
+     indigo ground with radial washes, drifting aurora, glass panels with
+     gradient borders, cyan-violet-pink accents. Deliberately single-world. */
+  :root {
+    --ground:#080b1a; --surface:#141a34; --surface-2:#1e264a;
+    --glass:rgba(17,22,45,.86); --glass-2:rgba(30,38,74,.55); --rule:#2b3566;
+    --ink:#eef2ff; --ink-2:#9aa7c7; --ink-3:#6b7699;
+    --teal:#22d3ee; --violet:#a78bfa; --pink:#f472b6; --amber:#fbbf24;
+    --red:#fb7185; --blue:#38bdf8; --green:#34d399; --lime:#a3e635;
+    --grad:linear-gradient(120deg,var(--teal),var(--violet) 55%,var(--pink));
+    --display:"Space Grotesk","Avenir Next","Segoe UI",ui-sans-serif,system-ui,sans-serif;
+    --body:"Inter",ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,monospace;
+    --xs:.7rem; --sm:.8rem; --md:.9rem; --lg:1.05rem; --xl:1.5rem; --xxl:2rem;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; color:var(--ink);
+    font-family:var(--body); font-size:var(--lg); line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+    background:
+      radial-gradient(1200px 800px at 15% -10%,#16204a 0,transparent 60%),
+      radial-gradient(1000px 700px at 100% 0,#241543 0,transparent 55%),
+      var(--ground);
+  }
+  .aurora{position:fixed;inset:0;z-index:-1;overflow:hidden;filter:blur(70px) saturate(140%);pointer-events:none}
+  .aurora .blob{position:absolute;width:46vw;height:46vw;border-radius:50%;opacity:.30;mix-blend-mode:screen}
+  .aurora .b1{background:var(--teal);top:-12vw;left:-8vw;animation:d1 26s ease-in-out infinite}
+  .aurora .b2{background:var(--violet);top:8vw;right:-12vw;animation:d2 32s ease-in-out infinite}
+  .aurora .b3{background:var(--pink);bottom:-16vw;left:22vw;animation:d3 30s ease-in-out infinite}
+  .aurora .b4{background:#3b82f6;bottom:-10vw;right:6vw;animation:d1 38s ease-in-out infinite reverse}
+  @keyframes d1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(6vw,5vw) scale(1.15)}}
+  @keyframes d2{0%,100%{transform:translate(0,0) scale(1.1)}50%{transform:translate(-7vw,4vw) scale(.95)}}
+  @keyframes d3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(4vw,-6vw) scale(1.2)}}
+
+  /* 2-inch gutters each side, full width otherwise. Collapses on screens too
+     narrow to give up 4 inches of horizontal space. */
+  .wrap{margin:0 auto;padding:clamp(16px,2.4vw,30px) 2in 48px;
+        display:flex;flex-direction:column;gap:clamp(12px,1.6vw,20px)}
+  @media(max-width:1100px){.wrap{padding-left:clamp(14px,4vw,60px);padding-right:clamp(14px,4vw,60px)}}
+  .eyebrow{font-family:var(--mono);font-size:var(--xs);letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3)}
+  h1{font-family:var(--display);font-size:clamp(1.6rem,3.3vw,2.4rem);font-weight:700;line-height:1.05;
+     letter-spacing:-.03em;margin:5px 0 0;text-wrap:balance;
+     background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .standfirst{max-width:78ch;color:var(--ink-2);margin:8px 0 0;font-size:var(--md);text-wrap:pretty}
+
+  /* Explanation is a horizontal band above the stage, so the stage itself can
+     run full width and read as a left-to-right flow. */
+  .panel{
+    display:grid;
+    grid-template-columns:minmax(230px,.85fr) minmax(250px,.95fr) minmax(300px,1.5fr);
+    gap:clamp(16px,2vw,32px); align-items:start;
+    padding:clamp(14px,1.6vw,22px) clamp(16px,2vw,26px);
+    border-radius:16px;border:1px solid transparent;
+    background-image:linear-gradient(var(--glass),var(--glass)),var(--grad);
+    background-origin:border-box;background-clip:padding-box,border-box;
+    backdrop-filter:blur(14px);
+  }
+  @media(max-width:900px){.panel{grid-template-columns:minmax(0,1fr)}}
+  .p-head{display:flex;flex-direction:column;gap:4px}
+  .p-text{display:flex;flex-direction:column;gap:10px}
+
+  .stage{position:relative;overflow:hidden;height:clamp(500px,72vh,860px);
+    border-radius:20px;border:1px solid transparent;
+    background-image:linear-gradient(var(--glass),var(--glass)),var(--grad);
+    background-origin:border-box;background-clip:padding-box,border-box;
+    backdrop-filter:blur(14px);
+    box-shadow:0 24px 60px -30px rgba(0,0,0,.85),0 0 44px -22px var(--violet)}
+  canvas{display:block;width:100%;height:100%}
+
+  .lvl{font-family:var(--mono);font-size:var(--xs);letter-spacing:.1em;text-transform:uppercase;
+       color:var(--violet);font-weight:700}
+  h2{font-family:var(--display);font-size:clamp(1.35rem,2vw,1.85rem);font-weight:700;line-height:1.1;
+     letter-spacing:-.02em;margin:0;text-wrap:balance}
+  .kicker{font-family:var(--display);font-style:italic;font-weight:500;color:var(--teal);
+          font-size:var(--md);margin:2px 0 0}
+  .io{display:grid;gap:.45rem;margin:0}
+  .io div{display:grid;grid-template-columns:52px 1fr;gap:.6rem;align-items:baseline;
+          font-size:var(--sm);color:var(--ink-2)}
+  .io dt{font-family:var(--mono);font-size:var(--xs);text-transform:uppercase;letter-spacing:.08em}
+  .io .i dt{color:var(--teal)} .io .p dt{color:var(--amber)} .io .o dt{color:var(--pink)}
+  .io dd{margin:0;color:var(--ink)}
+  /* the linear reading of all fourteen levels; see allLevels() */
+  .alltext{margin:34px auto 0;max-width:1180px;border:1px solid var(--line);
+    border-radius:14px;background:var(--glass);padding:0 clamp(14px,2vw,24px)}
+  .alltext>summary{cursor:pointer;padding:15px 0;font-family:var(--mono);
+    font-size:var(--sm);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+  .alltext>summary:hover{color:var(--ink)}
+  .alltext[open]>summary{border-bottom:1px solid var(--line);margin-bottom:6px}
+  .lvl-text{padding:22px 0;border-bottom:1px solid var(--line)}
+  .lvl-text:last-child{border-bottom:0}
+  .lvl-text h3{margin:.35rem 0 0;font-family:var(--display);font-size:var(--lg);
+    font-weight:600;color:var(--ink)}
+  .lvl-text .io{margin:12px 0}
+  .lvl-text .narration{margin:12px 0 0}
+  .lvl-why,.lvl-skip,.lvl-note{margin:10px 0 0;font-size:var(--sm);color:var(--ink-2)}
+  .lvl-why{color:var(--ink)}
+  .lvl-note{border-left:3px solid var(--teal);padding-left:12px}
+  .lvl-text .why-label{display:block;margin-bottom:3px}
+  .narration{margin:0;color:var(--ink-2);font-size:var(--md)}
+  .narration strong{color:var(--ink);font-weight:600}
+  /* the note spans the whole panel as its own row — long prose reads badly
+     trapped in a narrow column */
+  .note{grid-column:1/-1;border-left:3px solid var(--teal);
+        background:color-mix(in srgb,var(--teal) 8%,transparent);
+        padding:.7rem 1rem;border-radius:0 12px 12px 0;font-size:var(--sm);
+        color:var(--ink-2);margin:0;columns:2;column-gap:clamp(20px,2.4vw,34px)}
+  /* each note paragraph is its own block so a column break can't land
+     mid-sentence */
+  .note .np{display:block;break-inside:avoid;margin-bottom:.65rem}
+  .note .np:last-child{margin-bottom:0}
+  @media(max-width:900px){.note{columns:1}}
+  .note.warn{border-left-color:var(--violet);background:color-mix(in srgb,var(--violet) 10%,transparent)}
+  .note b{color:var(--ink)}
+
+  /* the "why" band sits directly under the stage, in a different accent from
+     the explanation band above it, so the two never read as the same thing */
+  .why{
+    display:grid;grid-template-columns:minmax(0,1.7fr) minmax(240px,1fr);
+    gap:clamp(14px,2vw,28px);align-items:start;
+    padding:clamp(13px,1.5vw,20px) clamp(16px,2vw,24px);
+    border-radius:16px;border:1px solid color-mix(in srgb,var(--lime) 32%,var(--rule));
+    background:color-mix(in srgb,var(--lime) 6%,var(--glass));
+  }
+  @media(max-width:900px){.why{grid-template-columns:minmax(0,1fr)}}
+  .why-label{
+    font-family:var(--mono);font-size:var(--xs);letter-spacing:.12em;
+    text-transform:uppercase;color:var(--lime);font-weight:700;
+    display:block;margin-bottom:6px;
+  }
+  .why p{margin:0;color:var(--ink);font-size:var(--md);line-height:1.6}
+  .why p strong{color:var(--lime);font-weight:600}
+  .skip{
+    border-left:3px solid var(--red);padding-left:12px;
+  }
+  .skip .why-label{color:var(--red)}
+  .skip p{color:var(--ink-2);font-size:var(--sm)}
+
+  .transport{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  button.ctl{font-family:var(--mono);font-size:var(--sm);color:var(--ink-2);background:var(--glass);
+    border:1px solid var(--rule);border-radius:999px;padding:.42rem .95rem;cursor:pointer;
+    transition:color .18s,border-color .18s,transform .18s}
+  button.ctl:hover{color:var(--ink);border-color:var(--teal);transform:translateY(-1px)}
+  button.ctl:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+  .counter{font-family:var(--mono);font-size:var(--sm);color:var(--ink-3);font-variant-numeric:tabular-nums}
+  .bar{flex:1;min-width:120px;height:5px;border-radius:999px;background:var(--surface-2);position:relative;overflow:hidden}
+  .bar i{position:absolute;inset:0 auto 0 0;background:var(--grad);width:0;border-radius:999px}
+
+  .foot{border-top:1px solid var(--rule);padding-top:16px;display:grid;
+        grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:11px 28px;
+        font-size:var(--sm);color:var(--ink-3)}
+  .foot p{margin:0} .foot b{color:var(--ink-2)}
+  @media(prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}.aurora .blob{animation:none!important}}
+</style>
+
+<div class="aurora" aria-hidden="true">
+  <span class="blob b1"></span><span class="blob b2"></span>
+  <span class="blob b3"></span><span class="blob b4"></span>
+</div>
+
+<!-- ISSUES #47. This page was written BEFORE the full run and never revisited.
+     Every number on it was typed in from the 300-question pilot, and two were
+     not merely stale but REVERSED -- most importantly "single-model Semantic
+     Entropy beats the ensemble", which the full run contradicts. It was
+     reachable in one click from the deck, which is exactly how #37 happened.
+     FIXED 2026-08-08: every figure now comes from summary.json via {{...}}
+     tokens in the prose and F("...") inside draw(). The page is under the same
+     harness as the deck and the tool, and the reversals are stated where they
+     happened rather than overwritten. -->
+<div class="wrap">
+  <!-- Empty on purpose. This warning used to ship its text in the static
+       markup behind `hidden`, and a hidden element is still text: every crawler,
+       link preview and agent that fetched this page read "summary.json did not
+       load" as the second thing on it, on a page where the data loads fine. The
+       message is written by the catch that means it. -->
+  <div id="figwarn" hidden style="max-width:1180px;margin:18px auto 0;padding:13px 18px;
+       border-radius:12px;border:1px solid #f59e0b;background:#fffbeb;color:#78350f;
+       font-size:14px"></div>
+  <div style="max-width:1180px;margin:18px auto 0;padding:14px 19px;border-radius:12px;
+       border:1px solid #cbd5e1;background:#f8fafc;color:#334155;line-height:1.55;
+       font-size:14px">
+    <b>This page describes the pipeline as it was designed; its figures are read live
+    from the completed run.</b> Where the full run <em>reversed</em> a proposal-era
+    finding — most importantly that single-model Semantic Entropy beat the ensemble —
+    the reversal is stated where it happened rather than quietly overwritten, because
+    which numbers moved between the 300-question pilot and the full corpus is itself a result.
+    See <a href="index.html" style="color:#1e40af">the results deck</a> for the findings.
+  </div>
+  <header>
+    <span class="eyebrow">M.S. Data Science &amp; AI · SFSU · Advisor: Dr. Shahrukh Humayoun</span>
+    <h1>FaultLines: the pipeline, level by level</h1>
+    <p class="standfirst">
+      One flowchart, followed all the way down. At every level: what goes <em>in</em> on the left,
+      what happens to it in the middle, and what comes <em>out</em> on the right — then how that
+      output becomes the next level's input.
+    </p>
+  </header>
+
+  <section class="panel" aria-live="polite">
+    <div class="p-head">
+      <span class="lvl" id="lvl"></span>
+      <h2 id="title"></h2>
+      <p class="kicker" id="kicker"></p>
+    </div>
+    <dl class="io" id="io"></dl>
+    <div class="p-text">
+      <p class="narration" id="narr"></p>
+    </div>
+    <p class="note" id="note" hidden></p>
+  </section>
+
+  <div class="stage"><canvas id="cv"></canvas></div>
+
+  <section class="why" aria-live="polite">
+    <div>
+      <span class="why-label">Why this step exists</span>
+      <p id="whyText"></p>
+    </div>
+    <div class="skip">
+      <span class="why-label">Skip it and…</span>
+      <p id="skipText"></p>
+    </div>
+  </section>
+
+  <div class="transport">
+    <button class="ctl" id="prev">← previous level</button>
+    <button class="ctl" id="next">next level →</button>
+    <span class="counter" id="counter"></span>
+    <div class="bar"><i id="barfill"></i></div>
+  </div>
+
+  <details class="alltext">
+    <summary>Every level on this page, as one document</summary>
+    <div id="alllevels"><!--baked:alllevels--><section class="lvl-text" id="T0"><span class="lvl">OVERVIEW</span><h3>The whole pipeline</h3><p class="kicker">Fourteen levels, one continuous flow — one dangerous case.</p><p class="narration">Questions enter at the top. Four models turn each one into four answers. Those answers are tested, stored, and split into a <strong>map</strong> of where questions live and a <strong>signal</strong> of who was wrong. The five research questions then probe that record &mdash; all built on the one case where the models agree <em>and</em> are wrong.</p><p class="lvl-why"><span class="why-label">Why this step exists</span>The thesis is one sentence: <strong>when models from different developers all agree and are all wrong &mdash; silent consensus &mdash; every disagreement-based detector reads &lsquo;safe&rsquo; and is wrong.</strong> Following the data end to end shows exactly where the borrowed signal stops and where this project&rsquo;s work &mdash; measuring that blind spot &mdash; starts.</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>you are left asserting novelty in prose, which is the thing the feedback asked you to stop doing.</p><p class="lvl-note">Use <b>next level →</b> to walk down. Nothing advances on its own. At every level the output on the right becomes the input on the left of the next.</p></section><section class="lvl-text" id="T1"><span class="lvl">LEVEL 1</span><h3>Sample the questions</h3><p class="kicker">Four datasets in, one frozen corpus out.</p><dl class="io"><div class="i"><dt>in</dt><dd>4 public datasets, by role</dd></div><div class="p"><dt>proc</dt><dd>load, dedupe, freeze — seed 42</dd></div><div class="o"><dt>out</dt><dd>34,062 questions, one frozen set</dd></div></dl><p class="narration">Silent consensus is rare — about 1 question in 36 — but the corpus is <strong>not</strong> screened down to it. All 34,062 questions are asked and graded, so every rate on this page is measured against the whole set rather than a filtered slice.</p><p class="lvl-why"><span class="why-label">Why this step exists</span>Four datasets by <strong>role</strong>: PopQA supplies <em>obscurity</em> (retrieval should fix it), non-adversarial TruthfulQA supplies <em>shared misconceptions</em> (retrieval should not), and TriviaQA and HaluEval supply the volume and variety that make the rates estimable. SimpleQA was dropped for <strong>size</strong> — too small to carry a subgroup — and it also ran near the floor (91% of answers wrong for the 7–9B local ensemble, 74.6% hosted). AbstentionBench was designed in as the misconception arm and <strong>rejected on ingest</strong>: it ships a loading script, unsupported from <code>datasets</code> 4.0. The fixed seed makes the whole study re-runnable.</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>the persistence test has nothing to compare against, and no one can reproduce the numbers.</p><p class="lvl-note">Each dataset earns its place by the role it plays in a later question. <b>PopQA is the retrieval positive control</b> (Wikidata-backed, answers guaranteed retrievable); non-adversarial TruthfulQA is the misconception arm, where retrieval is predicted to fail (RQ4).<br><br><b>TruthfulQA is small</b> — 340 questions after filtering — and every number resting on it carries an interval about 6 times wider than TriviaQA's, and about 10 times wider than PopQA's or HaluEval's (AUC 0.683 [95% CI 0.601, 0.764], against 0.861 [95% CI 0.848, 0.874] on TriviaQA). Quote it with the interval attached, never bare.<br><br><b>Deduplicated by content, not by id.</b> 8,489 questions were removed because they were the same question twice: TriviaQA's no-context split lists each question once per evidence source, and some PopQA rows repeat template, subject and answer exactly. Every earlier check worked on question ids, which are unique by construction — unique ids are not unique questions.</p></section><section class="lvl-text" id="T2"><span class="lvl">LEVEL 2</span><h3>Ask the four models</h3><p class="kicker">One question in, four answers out.</p><dl class="io"><div class="i"><dt>in</dt><dd>one question, identical prompt</dd></div><div class="p"><dt>proc</dt><dd>4 open-weight models, 4 makers, hosted</dd></div><div class="o"><dt>out</dt><dd>4 answers + a confidence each</dd></div></dl><p class="narration">Four different makers is <em>supposed</em> to mean four independent brains with independent mistakes. <strong>It does not.</strong> Measured on all 34,062 questions and compared <em>within the same dataset</em>, the four are wrong together <strong>3.3× as often</strong> as independence predicts — watch which model is answering, then read the red panel.</p><p class="lvl-why"><span class="why-label">Why this step exists</span>Four <strong>different makers</strong>, because two models from the same family share training data and therefore share mistakes. What matters is <strong>decorrelated errors, not raw capability</strong>: four excellent models that fail on the same questions are weak here, while four ordinary ones that fail differently are exactly what the method needs. <strong>This is the assumption the whole disagreement heuristic rests on, and measuring it is the main finding of this project</strong> — see the red panel.</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>you are back to one model checking itself, which is blind to the confident, repeated errors this whole project is about.</p><p class="lvl-note">Because the models are open-weight, each answer also yields its token log-probabilities. <b>Confidence = exp(mean log p)</b>, the inverse of perplexity. Many black-box APIs withhold this; the provider used here exposes it, which is what made the hosted run possible at all.<br><br><b>The diversity risk, measured.</b> The method assumes these four fail <i>differently</i>. They are all web-corpus trained, and the earlier version of this page said the correlation was <i>worth measuring before committing</i>. It was measured, on the full corpus rather than a slice, and the assumption does not hold:<br><br><b>— all four wrong together, within the same dataset: 10,819 questions observed against 3,257 expected under independence — 3.3× (95% CI 3.24–3.41)</b><br><b>— mean pairwise error correlation within each dataset φ = 0.44–0.60</b> (independence would be 0)<br><br><b>Why the within-dataset figure leads.</b> Pooled over the whole corpus the numbers look larger — all four wrong on 31.8% against 5.2% predicted, 6.1×, φ 0.654 — but that multiplies error rates averaged over datasets whose difficulty differs several-fold, and pooling alone manufactures co-failure: every model is wrong far more often on PopQA than on TriviaQA, so pooled across datasets the four look more correlated than they are within any one. Comparing within a dataset removes that. The pooled figure is kept, and demoted.<br><br>Per-model error rates, pooled: Qwen3-235B 44.0% · Gemma-3-27B 52.7% · Llama-4-Maverick 44.1% · Mistral-Small-3.2 51.3%.<br><br><b>Why this is the finding and not just a flaw.</b> Disagreement-based detectors rely on the assumption this measurement refutes. One plausible cause, not tested here, is that all four learned from much of the same web — in which case a differently-trained model would reduce the correlation but not remove it. The 2.8% of questions where the four are not merely jointly wrong but <i>identically</i> wrong is where the heuristic is not weakened but blind.<br><br><b>Quantization caveat.</b> The 2024 comparison arm runs 4-bit, so some of its measured disagreement could be a quantization artifact. The quantization level is <b>identical across all four</b> models in that arm so the noise is uniform, and a q8 replication bounds it: safe for rates, not for membership — about a third of which questions are blind spots changes with precision, so no single question should be read as settled.</p></section><section class="lvl-text" id="T3"><span class="lvl">LEVEL 3</span><h3>Grade every answer</h3><p class="kicker">Automatic — no human grades correctness.</p><dl class="io"><div class="i"><dt>in</dt><dd>4 answers + the dataset's answer key</dd></div><div class="p"><dt>proc</dt><dd>4 tests: exact → alias → contains → meaning</dd></div><div class="o"><dt>out</dt><dd>right / wrong per answer</dd></div></dl><p class="narration">Cheapest first. Exact string match, then the dataset's <strong>alias list</strong>, then whether the key is <strong>contained</strong> in the answer, then a <strong>semantic match</strong> — cosine similarity between sentence-transformer embeddings. Anything that passes none is graded wrong. TruthfulQA is graded by entailment (NLI) instead.</p><p class="lvl-why"><span class="why-label">Why this step exists</span>You cannot claim &ldquo;disagreement predicts error&rdquo; without knowing <strong>who was actually wrong</strong>. Grading supplies that truth. Note the split: the answer key is used to <strong>evaluate</strong> the signal, never to compute it.</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>you have a number that correlates with nothing you can check &mdash; an unfalsifiable claim rather than a finding.</p><p class="lvl-note">Plain string comparison would fail “It’s Canberra, the capital.” The embedding rescues paraphrase — cosine <b>0.88</b> → correct. Cosine cannot see negation, so it decides only a small share of answers (2.5% are marked correct by it); its limits are reported in Chapter 4 (§4.4).</p></section><section class="lvl-text" id="T4"><span class="lvl">LEVEL 4</span><h3>Score the disagreement</h3><p class="kicker">Four answers in, one number out.</p><dl class="io"><div class="i"><dt>in</dt><dd>4 answers + 4 confidences</dd></div><div class="p"><dt>proc</dt><dd>group by meaning → count → spread</dd></div><div class="o"><dt>out</dt><dd>one disagreement score, 0 to 0.75</dd></div></dl><p class="narration">Group the answers by <strong>meaning</strong> so paraphrase isn't counted as disagreement. The score is <strong>1 minus the largest group's share</strong> of the four answers: 0 when all four agree, 0.75 when all four differ. This head-count score is the headline (AUC 0.840). A variant that weights each group by the <strong>summed confidence</strong> of its members adds almost nothing at this scale.</p><p class="lvl-why"><span class="why-label">Why this step exists</span>Two design choices do the work. <strong>Grouping by meaning</strong> stops &ldquo;JFK&rdquo; and &ldquo;John F. Kennedy&rdquo; counting as a fight. <strong>Weighting by confidence</strong> was tested as a way to stop one hesitant outlier looking like a real split; it is a variant (AUC 0.844), and the headline 0.840 uses the plain head-count score.</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>the score is mostly noise: paraphrase inflates it, and a single unsure model can fake a serious disagreement.</p><p class="lvl-note">This score uses <b>no answer key at all</b> — that is what makes the signal label-free. Confidence weighting is the white-box option: it needs token probabilities. It was tested as a variant (0.844 against the head-count 0.840) and is not the headline score.</p></section><section class="lvl-text" id="T5"><span class="lvl">LEVEL 5</span><h3>Place it on the map</h3><p class="kicker">384 dimensions in, two out — and four uses.</p><dl class="io"><div class="i"><dt>in</dt><dd>question text · score · right-wrong</dd></div><div class="p"><dt>proc</dt><dd>position from meaning, colour toggled</dd></div><div class="o"><dt>out</dt><dd>the headline visual test</dd></div></dl><p class="narration">The map has <strong>two inputs, not one</strong>. The question wording is embedded and flattened by UMAP to decide <strong>where</strong> each dot sits. The Level 4 disagreement score is then painted on as <strong>colour</strong>. Position and colour are computed by completely separate paths.</p><p class="lvl-why"><span class="why-label">Why this step exists</span>Yes: the map is built from <strong>both</strong>. Embedding gives every question a position from its meaning; the Level 4 score is then applied as colour. They are kept on separate paths for two reasons. First, <strong>non-circularity</strong> &mdash; if you positioned questions using disagreement, then &ldquo;high-disagreement questions cluster&rdquo; would be true by construction and prove nothing; because position comes from wording alone, any colour pattern is a real finding. Second, <strong>localization depends on it</strong> &mdash; a brand-new question can be embedded and placed on the map without running a single model, which is the only reason a new question can be routed before it is answered. On its own, Level 4 gives thousands of separate numbers; joined to position they become <strong>regions</strong>, and three of the five research questions are claims about regions rather than about individual questions.</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>you would have scores with no geometry: localization has no neighbourhood to average over, persistence has nothing to overlay, and the retrieval test has no strata to separate. And if you instead laid questions out <em>by</em> their scores, the headline result would be circular &mdash; true by construction, worth nothing.</p><p class="lvl-note">This separation is deliberate. If position were derived from the disagreement score, high-disagreement questions would sit together <b>by construction</b> and the finding would be circular. Because position comes from wording alone — which never sees a model answer — any clustering of colour is a genuine result.</p></section><section class="lvl-text" id="T6"><span class="lvl">LEVEL 6</span><h3>Test it against a fair baseline</h3><p class="kicker">Same budget. One model, or four?</p><dl class="io"><div class="i"><dt>in</dt><dd>the same questions for both arms</dd></div><div class="p"><dt>proc</dt><dd>4 generations, allocated two ways</dd></div><div class="o"><dt>out</dt><dd>two ROC-AUC numbers</dd></div></dl><p class="narration">The baseline is <strong>Semantic Entropy</strong> (Kuhn 2023; Farquhar, Nature 2024). It asks <strong>one</strong> model the same question several times, groups its own answers by meaning, and measures the spread — self-inconsistency. FaultLines asks <strong>four different</strong> models once each. Same budget of four answers; the main difference is where they come from (the temperatures differ too — see the note).</p><p class="lvl-why"><span class="why-label">Why this step exists</span>A number on its own means nothing &mdash; AUC 0.840 is only impressive next to something. The baseline is <strong>Semantic Entropy</strong>, the standard single-model detector: sample one model several times and measure how much it contradicts <em>itself</em>. Running it on the same questions turns &ldquo;four models beat one&rdquo; from an assumption into a measurement. The design point is that <strong>both arms get the same generation budget</strong> &mdash; four generations per question either way &mdash; so the main thing that differs is whether those four come from one model or four different ones. That isolates model diversity as the main variable. What is <strong>matched</strong>: the budget of four answers per question, the same sentence-transformer and threshold for grouping answers, and the same answer key. The temperatures <strong>differ</strong>, by necessity: the ensemble answers at temperature 0, while Semantic Entropy samples at 1.0, because it needs varied samples from one model to measure anything.</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>you report a lone AUC with nothing to compare it to, and a reviewer can fairly say the same result might come from any single model sampled four times &mdash; which is the cheaper, already-published method.</p><p class="lvl-note"><b>What is matched:</b> four answers per question in both arms, the <b>same sentence-transformer and threshold</b> to group answers, and the same answer key. <b>What is not:</b> temperature. The ensemble answers at <b>0</b>; the baseline samples at <b>1.0</b> (the value the Semantic Entropy papers use), since sampling one model at 0 would return the same answer four times. <b>Result, and it reversed between scales.</b> On the 300-question pilot the best single model's Semantic Entropy BEAT the ensemble. At full scale it does not: cross-model disagreement <b>0.838</b> vs the best single model's <b>0.778</b> (Mistral-Small-3.2), on the same 6,436 questions at a matched budget of four answers either way (0.840 is the ensemble's AUC on all 34,062). <b>Quote the full-scale pair and never the pilot's</b> — the reversal is itself recorded, in RESULTS claim 2. Detection was never the contribution regardless: the map and the five research questions are things a single-model score cannot produce.<br><br><b>What a high AUC will NOT tell you.</b> (1) Nothing about the <b>all-agree-all-wrong</b> cases — they score exactly zero, are graded errors (about four in five genuine after adjudication), and drag the AUC down, which is exactly why RQ1 measures silent consensus as the hero question; a strong AUC and a large blind spot can coexist. (2) Nothing about <b>where</b> the errors are — one number cannot say “obscure mid-century films”. That is what the map adds, which is why this level is the project’s foundation rather than its result.</p></section><section class="lvl-text" id="T7"><span class="lvl">LEVEL 7</span><h3>What the paper stops at</h3><p class="kicker">Same signal. Everything after this is the difference.</p><dl class="io"><div class="i"><dt>in</dt><dd>the reproduced Detect result</dd></div><div class="p"><dt>proc</dt><dd>compare what is produced vs what is kept</dd></div><div class="o"><dt>out</dt><dd>the gap FaultLines fills</dd></div></dl><p class="narration">Hamidieh et al. (ICLR 2026) and Gorbett &amp; Jana (2026) produce <strong>one number per question</strong> and a calibration curve — then stop. Producing that number required a rich record, and they discard it.</p><p class="lvl-why"><span class="why-label">Why this step exists</span>This is the level that answers the feedback directly. The signal is the <strong>same</strong>; what happens to it is not. Putting the two side by side makes the contribution concrete instead of rhetorical.</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>the honest answer to &ldquo;isn't this already done?&rdquo; has to be improvised, which is exactly where the last review went badly.</p><p class="lvl-note">This level is the argument for the whole project: <b>same signal, different ending</b>. Everything to the right of the divider is what the next seven levels (8–14) build.</p></section><section class="lvl-text" id="T8"><span class="lvl">LEVEL 8</span><h3>Store the record</h3><p class="kicker">Kept, indexed, and split two ways.</p><dl class="io"><div class="i"><dt>in</dt><dd>the full record for every question</dd></div><div class="p"><dt>proc</dt><dd>written to columnar parquet on disk</dd></div><div class="o"><dt>out</dt><dd>a MAP branch and a SIGNAL branch</dd></div></dl><p class="narration">The record is <strong>persisted</strong>, not held in memory: four answer texts, four grades, four confidences, the embedding, the map position and the entity metadata. Then it splits, and every finding downstream reads one branch or the other.</p><p class="lvl-why"><span class="why-label">Why this step exists</span>Prior work computes the score and drops the rest. <strong>Keeping the record is the contribution</strong> &mdash; every finding downstream is only possible because the answers, grades, confidences and coordinates still exist. Because the vectors are kept too, &ldquo;questions near this fault&rdquo; is a nearest-neighbour query over the stored array rather than a re-run.</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>every finding would need the four models re-run from scratch &mdash; hours of GPU time per question you already answered.</p><p class="lvl-note">The 384-d question vectors live in <code>question_vectors.parquet</code>, so “find questions semantically near this fault line” is a scikit-learn NearestNeighbors call over an array already in memory (see <code>rq2_localize.py</code>). <b>No database and no vector service run anywhere in this project.</b> A Postgres + pgvector tier was in the original design and was dropped once the corpus turned out to fit comfortably in files — the whole record table is a few megabytes. Keeping it would have added an operational dependency that can be down on the day of an evaluation, and bought nothing.</p></section><section class="lvl-text" id="T9"><span class="lvl">LEVEL 9</span><h3>Check the grader by hand</h3><p class="kicker">The human step — small, bounded, and blinded.</p><dl class="io"><div class="i"><dt>in</dt><dd>graded TruthfulQA answers — 2 blinded strata</dd></div><div class="p"><dt>proc</dt><dd>one verdict per answer, machine grade hidden</dd></div><div class="o"><dt>out</dt><dd>430 verdicts + a grader error rate</dd></div></dl><p class="narration">The only place a human touches the data. A blinded command-line pass shows the question, one model's answer and the accepted gold answers — never the machine's verdict — and asks one question: <strong>correct, wrong, or cannot tell?</strong> 430 verdicts on TruthfulQA answers, across two strata the labeller cannot distinguish.</p><p class="lvl-why"><span class="why-label">Why this step exists</span>&ldquo;Label-free&rdquo; applies to the <strong>signal</strong>, not to the analysis. Whether an answer is genuinely wrong or merely worded differently from the answer key is a judgement no metric makes, and it decides whether silent consensus is a real phenomenon or a grading artifact. These 430 verdicts — all on TruthfulQA answers, where the automatic grader is weakest — were the first audit of the grader. The artifact rate itself is now <strong>measured rather than argued about</strong>: a blind adjudication pass over the 950 blind spots (950 decided) finds 21.1% of them are grading artifacts (95% CI 18.6–23.8%).</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>RQ1 cannot separate genuine silent consensus from grading noise, and the headline number rests on trusting an automatic grader that has never been audited.</p><p class="lvl-note"><b>What this is not.</b> An earlier design had these labels training a cause classifier that would then tag the remaining thousands automatically, and splitting errors into obscurity / staleness / misconception. <b>No classifier was ever built</b>, and the RQ4 cause strata are rule-based instead (rarest PopQA entities for obscurity, TruthfulQA errors for misconception) — which is more auditable and needs no training data. This panel used to describe the classifier as though it existed; it did not.<br><br><b>Two things this panel used to call open are now measured.</b> The hand labels were first compared with the <i>machine</i> grader. Agreement between humans was measured separately: a second annotator labelled 115 cases and agrees with the first at Cohen's κ = 0.970. And the grading-artifact rate is no longer the one-annotator bound this level once reported; it comes from a blind adjudication pass: 21.1% of the blind spots.</p></section><section class="lvl-text" id="T10"><span class="lvl">RQ1 · MEASURE</span><h3>Measure silent consensus</h3><p class="kicker">When all four agree — and all four are wrong.</p><dl class="io"><div class="i"><dt>in</dt><dd>the Level 4 score × the Level 3 grade</dd></div><div class="p"><dt>proc</dt><dd>isolate all-agree-all-wrong; read confidence</dd></div><div class="o"><dt>out</dt><dd>the blind spot, named and quantified</dd></div></dl><p class="narration"><strong>Agreement</strong> is the Level 4 score; <strong>correctness</strong> is the Level 3 grade. Crossing them exposes the blind spot: <strong>all four agree AND all four are wrong</strong>, so the vote fires nothing. The claim: ensemble <strong>confidence</strong> still separates right from wrong there — the full run measures AUC <strong>0.592</strong> across all 12,181 agreement-region questions, where vote-counting is 0.5 by construction.</p><p class="lvl-why"><span class="why-label">Why this step exists</span>This is the hero question. Every disagreement detector reads silent consensus as <strong>safe</strong> and is wrong. Prior work on correlated errors measures the phenomenon, but not this region for a disagreement detector on factual questions; doing so &mdash; and showing a white-box confidence signal survives where the black-box vote dies &mdash; is the contribution.</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>the project presents a detector while staying silent about the one error class it structurally cannot see.</p><p class="lvl-note">Kim et al. (2025), ‘Correlated errors in large language models’, shows models agree on wrong answers more than chance, so this <b>does not claim to discover the phenomenon</b> — it names, locates and quantifies it, and adds the confidence signal a black-box method cannot have.</p></section><section class="lvl-text" id="T11"><span class="lvl">RQ2 · LOCALIZE</span><h3>Localize the blind spots</h3><p class="kicker">Do they cluster — beyond just obscurity?</p><dl class="io"><div class="i"><dt>in</dt><dd>question wording + entity popularity</dd></div><div class="p"><dt>proc</dt><dd>map density, controlled for popularity</dd></div><div class="o"><dt>out</dt><dd>characterizable error regions</dd></div></dl><p class="narration">Do the blind spots scatter at random, or concentrate? Position comes from <strong>wording alone</strong>, so clustering of error is genuine. And it must survive a <strong>popularity control</strong> — it does: on 13,760 PopQA questions, popularity correlates with error at -0.287 while neighbourhood density correlates at +0.303, and density adds to the AUC on top of popularity. Two densities are reported and they are not interchangeable: +0.277 over the shared map — what this tool draws, and what a user brushing a region actually sees — and +0.303 recomputed within PopQA, which is what the control requires, because roughly a quarter of a PopQA question’s fifteen map-neighbours come from a different dataset.</p><p class="lvl-why"><span class="why-label">Why this step exists</span>If shared errors just tracked obscurity, this would be a <strong>known 2023 result</strong> (Kandpal; Mallen). The claim is stronger: blind spots cluster in characterizable regions and carry signal <em>beyond</em> popularity. Measured on the full corpus: popularity correlates with error at <strong>-0.287</strong> and neighbourhood density at <strong>+0.303</strong> (PopQA, n=13,760) — and controlling for popularity, density still adds to the AUC.</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>‘errors concentrate somewhere’ is not a finding unless the regions are characterizable and the clustering beats both chance and popularity.</p><p class="lvl-note">Position from wording is what makes this non-circular and lets an <em>unanswered</em> question be placed on the map — which is what RQ4 needs to route a new question before paying for it.</p></section><section class="lvl-text" id="T12"><span class="lvl">RQ3 · PERSIST</span><h3>Test whether blind spots persist</h3><p class="kicker">Plate tectonics — do the fault lines move?</p><dl class="io"><div class="i"><dt>in</dt><dd>the same frozen questions, twice</dd></div><div class="p"><dt>proc</dt><dd>run an older ensemble alongside</dd></div><div class="o"><dt>out</dt><dd>the persistent core</dd></div></dl><p class="narration">Everything so far is a snapshot of today's models. Persistence asks whether the cracks move: as models upgrade, <strong>do the same silent-consensus regions survive, or heal?</strong> A persistent core would suggest something the model generations share, such as their training data.</p><p class="lvl-why"><span class="why-label">Why this step exists</span>A blind spot that survives a whole model generation is <strong>more likely a structural limit (possibly inherited from shared training data, not tested here) than a bug awaiting the next release</strong>. That is the durability answer &mdash; the reason this stays relevant past any single model &mdash; and it is only testable because Level 1 froze the sample.</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>every result is a snapshot of today's models, with no way to tell a permanent blind spot from one the next release already fixed.</p><p class="lvl-note"><b>The non-adversarial filter applies to TruthfulQA only</b> — its adversarial half was written against GPT-3, which would confound a cross-generation test. The other three datasets run in full, so both arms cover the same 34,062 questions.<br><br><b>What the comparison found.</b> The newer ensemble is more accurate, and its blind spots do not shrink. Overall error falls 53.5% —> 41.1%. The grader counts 823 —> 950 blind spots, but the <i>genuine</i> ones, adjudicated case by case, go 698 —> 750: <b>not a significant change</b> (exact McNemar p = 0.101; outside judge 678 —> 716, p = 0.226). What does rise is the share of the remaining errors that are shared: 4.5% —> 6.8%, 1.50× (95% CI 1.39–1.62). One generation pair, with size and generation changing together.<br><br><b>The confound, stated plainly.</b> The two arms differ in <i>three</i> ways, not one: generation (2024 vs 2025), <b>scale</b> (7–9B dense vs 17–27B active, two of them MoE), and serving (local 4-bit vs hosted). Only precision is partially controlled, by a q8 replication on a sample of the corpus. So this level measures what happens when a deployed ensemble is <b>upgraded</b> — which in practice always means newer AND larger — and it cannot separate generation from scale. Isolating them needs a 2024-generation arm at 24–27B on the same provider; that arm is specified and costed but has not been run, and no fully size-matched four-maker set exists (Meta's 2025-generation Llama models (Llama 4) are all 17B active parameters or larger).</p></section><section class="lvl-text" id="T13"><span class="lvl">RQ4 · RETRIEVAL</span><h3>Test the retrieval dissociation</h3><p class="kicker">Retrieval fixes some errors — not shared misconceptions.</p><dl class="io"><div class="i"><dt>in</dt><dd>errors, split by cause</dd></div><div class="p"><dt>proc</dt><dd>re-answer closed-book vs with retrieval</dd></div><div class="o"><dt>out</dt><dd>what retrieval fixes — and what it can't</dd></div></dl><p class="narration">Split the errors by cause and give each retrieval. <strong>Obscurity</strong> (never in the weights) should be fixed — a document supplies the fact. <strong>Shared misconceptions</strong> should not — retrieval may draw on the same corpus that produced the myth. The predicted dissociation is the finding.</p><p class="lvl-why"><span class="why-label">Why this step exists</span>The most practically useful claim: it tells anyone building a RAG system <strong>which errors their retrieval layer will not save them from</strong>. The measured result: documents fix +65 points of obscurity errors but only +14 of misconceptions, and that +14 is not statistically significant (p = 0.077); the gap between them, +51.2 points, is the claim. One untested explanation is that retrieval draws from the same web that taught the misconception. An experiment that predicts a dissociation &mdash; helps here, not there &mdash; is far stronger than ‘retrieval improves accuracy’, and if it's wrong that is still a publishable result.</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>you would be left asserting that retrieval can't fix misconceptions in prose — the exact move the feedback said to stop making. Measure it instead.</p><p class="lvl-note">The corpus is itself a variable: a curated source (Wikipedia debunks common myths) versus open web. The sharpened claim: retrieval corrects an error only when the corpus holds an explicit correction — and for misconceptions the myth may be more retrievable than its correction. That explanation is untested.<br><br><b>RQ5 — agentic web search, reported here.</b> Letting the models search the web for themselves does not rescue the blind spots either: 64.7% of them (88 of 136) stay wrong (95% CI 56.4–72.2%). It has no level of its own because it reuses this set-up, with a search tool in place of fixed documents.</p></section><section class="lvl-text" id="T14"><span class="lvl">RISK REGISTER</span><h3>What could go wrong</h3><p class="kicker">Nine risks — three answered by the full run, three open for your input.</p><dl class="io"><div class="i"><dt>in</dt><dd>every risk worth naming</dd></div><div class="p"><dt>proc</dt><dd>answered by the full run, or left open on purpose</dd></div><div class="o"><dt>out</dt><dd>3 answered · 3 decisions · 3 carried</dd></div></dl><p class="narration">The upstream risk was always <strong>that the four models fail together</strong> — if they do, every finding downstream loses its foundation. It was measured first, not last — and the answer is <strong>yes, they do</strong>, on 950 questions where all four agreed and all four were wrong. The signal still lands at <strong>AUC 0.840</strong>, in the same range as the published work it builds on (measured on different questions), because those 950 are 7.8% of the agreement region rather than most of it. The risk was not retired; it became the thesis.</p><p class="lvl-why"><span class="why-label">Why this step exists</span>A proposal that only lists risks asks the reader to trust that they are survivable. <strong>Three of these now have answers from the full run</strong> — 34,062 questions, 136,248 graded answers — so the biggest unknowns are numbers rather than hopes. One did not come back the way the proposal hoped, and it is stated here as it landed. The three in the middle column are genuine forks where a supervisor's judgement changes the design.</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>the first hard question in the defence is one I have already answered but never wrote down, and the open decisions get made alone and late.</p><p class="lvl-note">The middle column is what I would most like your input on. Each is a fork where the data is in but the call is a design judgement, not a calculation.<br><br>Measured on the <b>full run</b> — 34,062 questions, 136,248 graded answers, zero failed calls. 78 defects were found and fixed along the way; every one, its cause and its fix is in <b>ISSUES.md</b>.</p></section><section class="lvl-text" id="T15"><span class="lvl">LEVEL 14</span><h3>Everything lands in the tool</h3><p class="kicker">Five linked views.</p><dl class="io"><div class="i"><dt>in</dt><dd>one exported data.json — records + labels</dd></div><div class="p"><dt>proc</dt><dd>a single static page, canvas 2D</dd></div><div class="o"><dt>out</dt><dd>five coordinated views</dd></div></dl><p class="narration">The tool is not a wrapper on a number. <strong>Each view supports one of the analysis tasks</strong>, and a labelling panel lets reviewers mark cases and export their verdicts. (The 430 blinded hand labels in the thesis were made with a separate command-line script.)</p><p class="lvl-why"><span class="why-label">Why this step exists</span>The tool is not a write-up of the findings &mdash; it <strong>produces</strong> them. Each view supports one task, and the labelling panel lets a reviewer mark cases and export their verdicts. That is also what makes this a visual-analytics thesis rather than an ML report</p><p class="lvl-skip"><span class="why-label">Skip it and…</span>the labelling has nowhere to happen, and the findings become static figures a reader has to take on trust.</p><p class="lvl-note"><b>One static page, data baked in, no server.</b> An earlier design had three tiers — Neon Postgres → FastAPI on Hugging Face Spaces → React on Vercel — and it was dropped on purpose. The evaluation was designed around participants opening a link, and a server was one more thing that could be down on the day. Everything the tool needs ships in the page and one JSON file; state, brushing and linked selection are plain JavaScript; the map is a 2D canvas and the ensemble charts are D3.</p></section><!--/baked:alllevels--></div>
+  </details>
+
+  <footer class="foot" id="foot">
+    <p><b>Run complete.</b> <span id="figQ"><!--baked:figQ-->34,062<!--/baked:figQ--></span> questions, <span id="figG"><!--baked:figG-->136,248<!--/baked:figG--></span> graded answers, zero failed
+      calls. Every figure on this page is read from <span style="font-family:ui-monospace,
+      monospace">summary.json</span> at load — see ISSUES #47 for what happened when they
+      were typed instead. All five research questions are answered; what remains is the
+      write-up. <b>The expert evaluation was not run</b> — Chapter 6 is an
+      <em>analytical</em> evaluation, and says so in its first paragraph.</p>
+    <p><b>Borrowed vs ours.</b> Levels 1–6 build and test the borrowed signal (Hamidieh ’26;
+      Gorbett ’26). Level 7 states exactly where that work stops; Levels 8–14 are what
+      FaultLines adds — five research questions, all built on silent consensus (RQ1–RQ4 have a
+      level each; RQ5, agentic web search, is reported with RQ4).</p>
+  </footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+var reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------------- theme ---------------- */
+var C={};
+function hex(h){h=h.trim().replace("#","");if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+  return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+(function(){var cs=getComputedStyle(document.documentElement);
+  ["ink","ink-2","ink-3","rule","teal","violet","pink","amber","red","blue","green","lime","surface","surface-2"]
+  .forEach(function(n){C[n]=hex(cs.getPropertyValue("--"+n));});})();
+
+/* ---------------- math ---------------- */
+function clamp(v,a,b){return v<a?a:v>b?b:v;}
+function mix(a,b,t){t=clamp(t,0,1);return[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];}
+function rgba(c,a){return"rgba("+(c[0]|0)+","+(c[1]|0)+","+(c[2]|0)+","+a+")";}
+function easeOut(t){return 1-Math.pow(1-t,3);}
+function stag(i,t,d,u){d=d||.06;u=u||.4;return clamp((t-i*d)/u,0,1);}
+function mul(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+var rnd=mul(42);
+function gauss(){var u=0,v=0;while(!u)u=rnd();while(!v)v=rnd();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+
+/* SC is the canvas scale factor. It was called S until 2026-08-24, and so was
+   the summary.json data object 246 lines below -- one `var S` in one IIFE
+   scope, two meanings. resize() then overwrote the data with a number, and
+   because sub() guards with `if(!S)` and a scale of 1.0 is truthy, every
+   figure lookup went on to read S.signal of a number and threw. It survived
+   only because resize() returns early before layout, so the first paint won
+   the race; resizing the window -- or rotating a phone -- lost it, and from
+   then on every "next level" click threw and the canvas threw once a frame. */
+var ctx,W=0,H=0,SC=1;
+function px(v){return v*SC;}
+var FD='"Space Grotesk","Avenir Next","Segoe UI",ui-sans-serif,sans-serif',
+    FB='"Inter",ui-sans-serif,system-ui,"Segoe UI",sans-serif',
+    FM='"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace';
+var TS=1.22;   /* global canvas text scale */
+
+function fontOf(o){return (o.italic?"italic ":"")+(o.weight||400)+" "+px((o.size||11)*TS)+"px "+(o.font||FB);}
+/* letter-spacing must be applied while measuring too — otherwise every spaced
+   label measures narrower than it draws and fit() lets it overrun its box */
+function meas(s,o){o=o||{};ctx.font=fontOf(o);
+  var has="letterSpacing"in ctx;
+  if(has&&o.spacing!==undefined)ctx.letterSpacing=px(o.spacing)+"px";
+  var w=ctx.measureText(s).width;
+  if(has)ctx.letterSpacing="0px";
+  return w;}
+function txt(s,x,y,o){o=o||{};
+  ctx.font=fontOf(o);
+  ctx.textAlign=o.align||"left";ctx.textBaseline=o.base||"alphabetic";
+  if(o.spacing!==undefined&&"letterSpacing"in ctx)ctx.letterSpacing=px(o.spacing)+"px";
+  ctx.fillStyle=rgba(o.color||C.ink,o.alpha===undefined?1:o.alpha);
+  ctx.fillText(s,x,y);
+  if("letterSpacing"in ctx)ctx.letterSpacing="0px";
+  ctx.textAlign="left";}
+
+/* Every string in a box goes through fit(): it shrinks until it fits the width
+   it was given, so nothing can spill past a panel edge or collide with the
+   column beside it. This is the guard against overlap, not per-site tweaking. */
+function fit(s,x,y,maxW,o){
+  o=o||{};var sz=o.size||11,lo=o.min||6.8,probe={};
+  for(var k in o)probe[k]=o[k];
+  while(sz>lo){probe.size=sz;if(meas(s,probe)<=maxW)break;sz-=.35;}
+  probe.size=sz;txt(s,x,y,probe);return sz;
+}
+/* wrap that also never exceeds maxW; x is the left edge (or centre if centred) */
+function wrapFit(s,x,y,maxW,o){
+  o=o||{};var lh=px(o.lh||17),words=s.split(" "),line="",ly=y,n=0,max=o.maxLines||99;
+  for(var i=0;i<words.length;i++){
+    var test=line?line+" "+words[i]:words[i];
+    if(meas(test,o)>maxW&&line){
+      if(n+1>=max){fit(line+"…",x,ly,maxW,o);return ly;}
+      txt(line,x,ly,o);line=words[i];ly+=lh;n++;
+    } else line=test;
+  }
+  fit(line,x,ly,maxW,o);return ly;
+}
+function lab(s,x,y,o){o=o||{};txt(s.toUpperCase(),x,y,{size:o.size||9,font:FM,spacing:o.spacing||1.1,
+  color:o.color||C["ink-3"],alpha:o.alpha,align:o.align,weight:o.weight||600,base:o.base});}
+function labFit(s,x,y,maxW,o){o=o||{};
+  return fit(s.toUpperCase(),x,y,maxW,{size:o.size||9,font:FM,spacing:o.spacing||1.1,
+    color:o.color||C["ink-3"],alpha:o.alpha,weight:o.weight||600,min:6});}
+function rect(x,y,w,h,o){o=o||{};var r=px(o.r===undefined?10:o.r);
+  ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h);
+  if(o.fill){ctx.fillStyle=rgba(o.fill,o.fillA===undefined?1:o.fillA);ctx.fill();}
+  if(o.stroke){ctx.strokeStyle=rgba(o.stroke,o.strokeA===undefined?1:o.strokeA);
+    ctx.lineWidth=px(o.lw||1);ctx.stroke();}}
+function glow(x,y,r,c,a){var g=ctx.createRadialGradient(x,y,0,x,y,r);
+  g.addColorStop(0,rgba(c,a));g.addColorStop(1,rgba(c,0));
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();}
+function arw(x1,y1,x2,y2,o){o=o||{};var c=o.color||C["ink-3"],a=o.alpha===undefined?1:o.alpha;
+  ctx.strokeStyle=rgba(c,a);ctx.lineWidth=px(o.lw||1.3);
+  if(o.dash)ctx.setLineDash([px(3),px(4)]);
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);
+  var an=Math.atan2(y2-y1,x2-x1),h=px(o.head||5.5);
+  ctx.beginPath();ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-h*Math.cos(an-.42),y2-h*Math.sin(an-.42));
+  ctx.lineTo(x2-h*Math.cos(an+.42),y2-h*Math.sin(an+.42));
+  ctx.closePath();ctx.fillStyle=rgba(c,a);ctx.fill();}
+function dot(x,y,r,c,a){ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fillStyle=rgba(c,a);ctx.fill();}
+
+/* ---------------- knowledge map ---------------- */
+var N=360,P=[],CL=[];
+for(var c=0;c<7;c++)CL.push({x:.18+rnd()*.64,y:.16+rnd()*.62,r:.05+rnd()*.06,fault:false});
+CL[1].fault=CL[4].fault=CL[5].fault=true;
+var SILENT=CL[4];
+for(var i=0;i<N;i++){
+  var cl=CL[(i*7919)%CL.length];
+  var dis=clamp((cl.fault?.52+rnd()*.44:rnd()*.32)+gauss()*.08,0,1);
+  var harmless=dis>.35&&rnd()<.42;
+  P.push({ds:i%3,cl:cl,dis:dis,harmless:harmless,
+    silent:!harmless&&dis<.28&&cl===SILENT&&rnd()<.6,
+    real:!harmless&&dis>.45,cause:(rnd()*4)|0,persist:rnd()<.6,
+    err:rnd()<(.12+.62*dis),
+    cx:cl.x+gauss()*cl.r,cy:cl.y+gauss()*cl.r});
+}
+function drawMap(b,variant,t,now){
+  var pulse=.5+.5*Math.sin(now/620);
+  if(variant==="forecast")CL.forEach(function(cl){if(!cl.fault)return;
+    var x=b.x+cl.x*b.w,y=b.y+cl.y*b.h,R=cl.r*b.w*2.6;
+    for(var k=3;k>=1;k--){ctx.beginPath();ctx.arc(x,y,R*(k/3),0,7);
+      ctx.strokeStyle=rgba(C.amber,.13*t*k);ctx.lineWidth=px(1);ctx.stroke();}
+    glow(x,y,R,C.amber,.18*t);});
+  if(variant==="audit"){var x=b.x+SILENT.x*b.w,y=b.y+SILENT.y*b.h,R=SILENT.r*b.w*2.7;
+    glow(x,y,R,C.violet,.26*t);
+    ctx.setLineDash([px(4),px(5)]);ctx.beginPath();ctx.arc(x,y,R*.6,0,7);
+    ctx.strokeStyle=rgba(C.violet,.6*t);ctx.lineWidth=px(1.2);ctx.stroke();ctx.setLineDash([]);}
+  if(variant==="track")CL.forEach(function(cl){if(!cl.fault)return;
+    var x=b.x+(cl.x+.038)*b.w,y=b.y+(cl.y+.03)*b.h,R=cl.r*b.w*2.2;
+    ctx.setLineDash([px(3),px(4)]);ctx.beginPath();ctx.arc(x,y,R,0,7);
+    ctx.strokeStyle=rgba(C["ink-3"],.7*t);ctx.lineWidth=px(1.2);ctx.stroke();ctx.setLineDash([]);});
+  for(var i=0;i<N;i++){
+    var p=P[i],col,al,r;
+    if(variant==="heat"){col=mix(C.teal,C.amber,p.dis);al=.35+p.dis*.6;r=1.9+p.dis*1.9;}
+    else if(variant==="type"){if(p.harmless){col=C["ink-3"];al=.12;r=1.4;}
+      else if(p.real){col=C.red;al=.95;r=2.9;}else{col=C["ink-3"];al=.25;r=1.8;}}
+    else if(variant==="forecast"){col=C["ink-3"];al=.2;r=1.7;}
+    else if(variant==="audit"){if(p.silent){col=C.violet;al=1;r=3.2*(1+.25*pulse);}
+      else{col=C["ink-3"];al=.13;r=1.5;}}
+    else if(variant==="error"){if(p.err){col=C.red;al=.9;r=2.8;}else{col=C.teal;al=.3;r=1.7;}}
+    else if(variant==="cause"){if(p.real){col=[C.amber,C.teal,C.violet,C.blue][p.cause];al=.92;r=2.9;}
+      else{col=C["ink-3"];al=.1;r=1.4;}}
+    else if(variant==="track"){if(p.dis>.45&&p.persist){col=C.amber;al=.95;r=3;}
+      else if(p.dis>.45){col=C["ink-3"];al=.26;r=2;}else{col=C["ink-3"];al=.09;r=1.4;}}
+    else{col=C["ink-3"];al=.28;r=1.8;}
+    dot(b.x+p.cx*b.w,b.y+p.cy*b.h,px(r),col,al*t);
+  }
+}
+
+/* ---------------- spine ---------------- */
+var SPINE=[
+  {n:"1",k:"Sample"},{n:"2",k:"Ask"},{n:"3",k:"Grade"},{n:"4",k:"Score"},
+  {n:"5",k:"Map"},{n:"6",k:"Test"},{n:"7",k:"The gap"},{n:"8",k:"Store"},
+  {n:"9",k:"Label"},{n:"10",k:"Measure"},{n:"11",k:"Localize"},{n:"12",k:"Persist"},
+  {n:"13",k:"Retrieval"},{n:"14",k:"Tool"}
+];
+function drawSpine(cur,t){
+  if(cur<0)return;
+  var y=H*.072,x0=W*.045,x1=W*.955,gap=(x1-x0)/(SPINE.length-1);
+  ctx.beginPath();ctx.moveTo(x0,y);ctx.lineTo(x1,y);
+  ctx.strokeStyle=rgba(C.rule,.9);ctx.lineWidth=px(1);ctx.stroke();
+  SPINE.forEach(function(s,i){
+    var x=x0+i*gap,on=i===cur,done=i<cur;
+    if(on)glow(x,y,px(18),C.violet,.5);
+    dot(x,y,px(on?7.5:4.5),on?C.violet:(done?C.teal:C["ink-3"]),on?1:(done?.85:.45));
+    if(on){
+      labFit(s.k,x-meas(s.k.toUpperCase(),{size:9,font:FM,weight:600})/2,y-px(16),gap*2.2,
+        {color:C.violet,alpha:1,size:9,weight:700});
+      txt(s.n,x,y+px(3.4),{size:7.6,font:FM,weight:700,align:"center",color:C.ink});
+    }
+  });
+}
+
+/* ---------------- three-column frame ---------------- */
+function boxes(){
+  var top=H*.145,bot=H*.955;
+  return {
+    i:{x:W*.04, y:top,w:W*.215,h:bot-top},
+    p:{x:W*.30, y:top,w:W*.40, h:bot-top},
+    o:{x:W*.745,y:top,w:W*.215,h:bot-top}
+  };
+}
+/* ---------------- hover tooltips ----------------
+   Canvas has no DOM hover, so each box registers a hotspot each frame and the
+   tooltip is painted last, on top of everything. */
+var MX=-1e4,MY=-1e4,HOT=[],CURTIPS={};
+function qmark(x,y,title,body){
+  if(!body)return;
+  var r=px(9);
+  HOT.push({x:x,y:y,r:r,title:title,body:body});
+  var on=Math.hypot(MX-x,MY-y)<r*2.2;
+  ctx.beginPath();ctx.arc(x,y,r,0,7);
+  ctx.fillStyle=rgba(C.teal,on?.30:.13);ctx.fill();
+  ctx.strokeStyle=rgba(C.teal,on?.95:.5);ctx.lineWidth=px(1);ctx.stroke();
+  txt("?",x,y+px(3.6),{size:9.5,font:FM,weight:700,align:"center",
+    color:C.teal,alpha:on?1:.8});
+}
+function layout(s,maxW,o){
+  var words=s.split(" "),line="",out=[];
+  for(var i=0;i<words.length;i++){
+    var test=line?line+" "+words[i]:words[i];
+    if(meas(test,o)>maxW&&line){out.push(line);line=words[i];}else line=test;
+  }
+  if(line)out.push(line);return out;
+}
+function drawTip(){
+  var h=null;
+  for(var i=0;i<HOT.length;i++)
+    if(Math.hypot(MX-HOT[i].x,MY-HOT[i].y)<HOT[i].r*2.2){h=HOT[i];break;}
+  if(!h)return;
+  var pad=px(14),maxW=Math.min(px(300),W*.34);
+  var tOpt={size:10.5,weight:700,font:FM},bOpt={size:11,lh:15};
+  var tl=layout(h.title,maxW,tOpt),bl=layout(h.body,maxW,bOpt);
+  var lh=px(15.5),th=px(16);
+  var boxW=maxW+pad*2,boxH=pad*2+tl.length*th+px(6)+bl.length*lh;
+  var x=h.x+px(16),y=h.y+px(14);
+  if(x+boxW>W-px(8))x=h.x-px(16)-boxW;
+  if(y+boxH>H-px(8))y=Math.max(px(8),H-px(8)-boxH);
+  ctx.save();
+  ctx.shadowColor="rgba(0,0,0,.6)";ctx.shadowBlur=px(22);ctx.shadowOffsetY=px(6);
+  rect(x,y,boxW,boxH,{fill:[13,19,48],fillA:.99,stroke:C.teal,strokeA:.75,r:12});
+  ctx.restore();
+  var cy=y+pad+px(10);
+  tl.forEach(function(ln){txt(ln,x+pad,cy,{size:10.5,weight:700,font:FM,color:C.teal});cy+=th;});
+  cy+=px(6);
+  bl.forEach(function(ln){txt(ln,x+pad,cy,{size:11,color:C.ink});cy+=lh;});
+}
+
+/* content inside a shell always starts below the header block */
+function bodyTop(b){return b.y+px(62);}
+function shell(b,title,sub,col,t){
+  var a=easeOut(t),pad=px(14),inner=b.w-pad*2-px(22);
+  rect(b.x,b.y,b.w,b.h,{fill:col,fillA:.07*a,stroke:col,strokeA:.42*a,r:14});
+  labFit(title,b.x+pad,b.y+px(22),inner,{color:col,alpha:a,weight:700,size:9.5});
+  if(sub)fit(sub,b.x+pad,b.y+px(42),inner,{size:10.5,font:FM,color:C["ink-3"],alpha:a});
+  // which column is this? pick the matching tooltip
+  var key=b.x<W*.22?"i":(b.x<W*.72?"p":"o");
+  if(CURTIPS[key])qmark(b.x+b.w-px(18),b.y+px(18),title.toUpperCase(),CURTIPS[key]);
+}
+/* a "built with" strip pinned to the bottom of the process column */
+function tools(b,list,t){
+  var a=easeOut(stag(6,t,.08,.5));if(a<=0)return;
+  var pad=px(14),y=b.y+b.h-px(16);
+  ctx.beginPath();ctx.moveTo(b.x+pad,y-px(20));ctx.lineTo(b.x+b.w-pad,y-px(20));
+  ctx.strokeStyle=rgba(C.rule,.8*a);ctx.lineWidth=px(1);ctx.stroke();
+  var s=list.join("   ·   ");
+  fit(s,b.x+pad,y,b.w-pad*2,{size:9.5,font:FM,color:C.lime,alpha:.85*a});
+}
+function stream(now,opt){
+  var n=opt.count||14,dur=opt.dur||2400;
+  for(var i=0;i<n;i++){
+    var e=((now/dur)+i/n)%1,x,y,col,a=1,r=opt.r||3;
+    if(e<.42){var u=e/.42;x=opt.x0+(opt.xm-opt.x0)*u;y=opt.y0(i)+(opt.ym-opt.y0(i))*u;col=opt.cIn;}
+    else if(e<.58){x=opt.xm+(opt.xm2-opt.xm)*((e-.42)/.16);y=opt.ym;
+      col=mix(opt.cIn,opt.cOut,(e-.42)/.16);a=opt.hideMid?.15:1;}
+    else{var v=(e-.58)/.42;x=opt.xm2+(opt.x1-opt.xm2)*v;y=opt.ym+(opt.y1(i)-opt.ym)*v;col=opt.cOut;}
+    var fade=Math.min(1,Math.min(e,1-e)*8);
+    glow(x,y,px(r*2.6),col,.2*a*fade);
+    dot(x,y,px(r),col,a*fade*(opt.alpha||.95));
+  }
+}
+
+/* ================= levels ================= */
+var L=[];function lvl(o){L.push(o);}
+
+/* ---------------- figures come from summary.json, not from prose ----------
+   ISSUES #47. Every number on this page used to be typed into the narration,
+   and because the page reads no data, nothing in the project could notice when
+   the full run superseded the pilot -- including when it REVERSED a result.
+   It stayed wrong, and linked from the deck, for four months.
+
+   The narration keeps {{token}} placeholders and render() substitutes them, so
+   the levels array can stay a plain literal (it is ~850 lines of top-level
+   lvl() calls and wrapping it in a callback to await a fetch would be a much
+   larger change than the problem deserves). Until the fetch lands, tokens
+   render as "…" rather than as a stale number -- an unresolved placeholder is
+   an obvious defect; a confident wrong figure is not. */
+var S=null;
+var FIG={
+  auc:        function(){return S.signal.overall.auc.toFixed(3)},
+  aucw:       function(){return S.signal.overall.auc_weighted.toFixed(3)},
+  single:     function(){return S.baseline.single_model[0].auc.toFixed(3)},
+  singleName: function(){return S.baseline.single_model[0].model},
+  basen:      function(){return S.baseline.n.toLocaleString()},
+  popqa:      function(){return dsAuc("popqa")},
+  triviaqa:   function(){return dsAuc("triviaqa")},
+  truthfulqa: function(){return dsAuc("truthfulqa")},
+  questions:  function(){return S.corpus.analysed.toLocaleString()},
+  gens:       function(){return S.corpus.generations.toLocaleString()},
+  silent:     function(){return S.funnel.silent.toLocaleString()},
+  unanimous:  function(){return S.funnel.unanimous.toLocaleString()},
+  silentPc:   function(){return (S.funnel.silent/S.funnel.unanimous*100).toFixed(1)},
+  shareOld:   function(){return (S.rq3.rates[0].share*100).toFixed(1)},
+  shareNew:   function(){return (S.rq3.rates[1].share*100).toFixed(1)},
+  rq1auc:     function(){return S.rq1.agree_auc.toFixed(3)},
+  corrPop:    function(){return S.rq2.corr_pop.toFixed(3)},
+  corrDensity:function(){return "+"+S.rq2.corr_density.toFixed(3)},
+  /* The control. corr_density is computed on the SHARED map, which is what
+     the tool draws; this one recomputes neighbours inside PopQA, which is
+     what the popularity control needs. roughly a quarter of a PopQA question's
+     neighbours are from another dataset, so they are not the same number.
+     AUDIT n1, closed 2026-08-25. */
+  corrDensityIn:function(){return "+"+S.rq2.corr_density_within.toFixed(3)},
+  corrN:      function(){return S.rq2.n.toLocaleString()},
+  defects:    function(){return S.defects},
+  /* The grading-artifact rate and the second-annotator agreement. Both
+     superseded prose that stated the one-annotator "at most 5.6%" bound as a
+     literal; they are read here so the next export cannot leave them stale. */
+  artifactPc: function(){return (S.artifact.rate*100).toFixed(1)},
+  artifactCI: function(){return (S.artifact.lo*100).toFixed(1)+"–"+(S.artifact.hi*100).toFixed(1)},
+  artifactJudged:function(){return S.artifact.n_judged.toLocaleString()},
+  artifactTotal:function(){return S.artifact.n_total.toLocaleString()},
+  irrKappa:   function(){return S.irr.kappa.toFixed(3)},
+  irrN:       function(){return S.irr.annotators[0].labelled.toLocaleString()},
+  /* Added 2026-09-27, correction pass (ISSUES #66-#77). Every figure that was
+     still typed into this page's prose or canvas -- the 42,551 corpus, the 9.0x
+     pooled concordance, the per-model error rates, the RQ3 counts -- now reads
+     from here. The corpus lost 8,489 duplicate questions and every one of those
+     literals went stale at once, which is the whole argument for this table. */
+  asked:      function(){return S.corpus.asked.toLocaleString()},
+  dups:       function(){return S.corpus.duplicates.toLocaleString()},
+  ungradeable:function(){return (S.corpus.asked-S.corpus.duplicates-S.corpus.analysed).toLocaleString()},
+  answersAsked:function(){return (S.corpus.asked*4).toLocaleString()},
+  nPopqa:     function(){return dsN("popqa")},
+  nTriviaqa:  function(){return dsN("triviaqa")},
+  nHalueval:  function(){return dsN("halueval")},
+  nTruthfulqa:function(){return dsN("truthfulqa")},
+  tqaAucCI:   function(){return aucCI("truthfulqa")},
+  tvaAucCI:   function(){return aucCI("triviaqa")},
+  tqaWidthX:  function(){var a=aucRow("truthfulqa"),b=aucRow("triviaqa");
+                         return (a.width/b.width).toFixed(0)},
+  /* against the two large sets: TruthfulQA's width over the mean of PopQA's
+     and HaluEval's widths */
+  tqaWidthBig:function(){var a=aucRow("truthfulqa"),p=aucRow("popqa"),h=aucRow("halueval");
+                         return (a.width/((p.width+h.width)/2)).toFixed(0)},
+  silentRate: function(){return (S.funnel.silent/S.funnel.total*100).toFixed(1)},
+  silentOneIn:function(){return String(Math.round(S.funnel.total/S.funnel.silent))},
+  outsideTqa: function(){var t=S.signal.by_dataset.filter(function(d){return d.dataset==="truthfulqa"})[0];
+                         return ((1-t.silent/S.signal.overall.silent)*100).toFixed(1)},
+  handlabels: function(){return S.handlabels.toLocaleString()},
+  gcJudged:   function(){return S.grader_check.judged.toLocaleString()},
+  gcGenerous: function(){return String(S.grader_check.generous)},
+  gcHarsh:    function(){return String(S.grader_check.harsh)},
+  baseCross:  function(){return S.baseline.cross_model_same_qids.toFixed(3)},
+  /* independence (ISSUES #68). STRATIFIED leads: observed vs expected all-wrong
+     counts summed within each dataset. The pooled figure multiplies error rates
+     averaged over datasets whose difficulty differs several-fold, and pooling
+     alone manufactures co-failure, so it is shown second and labelled. */
+  strRatio:   function(){return S.independence.stratified.ratio.toFixed(1)},
+  strCI:      function(){var c=S.intervals.concordance;return c.lo.toFixed(2)+"–"+c.hi.toFixed(2)},
+  strObs:     function(){return S.independence.stratified.observed.toLocaleString()},
+  strExp:     function(){return Math.round(S.independence.stratified.expected).toLocaleString()},
+  phiMin:     function(){return S.independence.stratified.phi_min.toFixed(2)},
+  phiMax:     function(){return S.independence.stratified.phi_max.toFixed(2)},
+  poolObs:    function(){return (S.independence.all_wrong*100).toFixed(1)},
+  poolExp:    function(){return (S.independence.all_wrong_if_independent*100).toFixed(1)},
+  poolRatio:  function(){return S.independence.ratio.toFixed(1)},
+  poolPhi:    function(){return S.independence.phi_mean.toFixed(3)},
+  modelErr:   function(){var I=S.independence;return I.models.map(function(m){
+                return m+" "+(I.error_rates[m]*100).toFixed(1)+"%"}).join(" · ")},
+  /* RQ3 */
+  healed:     function(){return S.rq3.healed.toLocaleString()},
+  emerged:    function(){return S.rq3.emerged.toLocaleString()},
+  persisted:  function(){return S.rq3.persisted.toLocaleString()},
+  /* half-up from the 4-dp export: 0.5345*100 is 53.4499... in floating point,
+     so toFixed(1) printed 53.4 for a rate that is 53.45% (0.53453) -> 53.5. */
+  wrongOld:   function(){return pc1(S.rq3.rates[0].wrong)},
+  wrongNew:   function(){return pc1(S.rq3.rates[1].wrong)},
+  /* RQ3 grader counts vs adjudicated (genuine) counts, primary judge and the
+     outside judge, with the exact McNemar p for the genuine growth. */
+  gradOld:    function(){return S.rq3.gen2_silent.toLocaleString()},
+  gradNew:    function(){return S.rq3.gen3_silent.toLocaleString()},
+  genOld:     function(){return judge(true).genuine["2024"].toLocaleString()},
+  genNew:     function(){return judge(true).genuine["2025"].toLocaleString()},
+  genP:       function(){return judge(true).rq3.p_growth.toFixed(3)},
+  outOld:     function(){return judge(false).genuine["2024"].toLocaleString()},
+  outNew:     function(){return judge(false).genuine["2025"].toLocaleString()},
+  outP:       function(){return judge(false).rq3.p_growth.toFixed(3)},
+  blindOld:   function(){return (S.intervals.blind_rise.from*100).toFixed(2)},
+  blindNew:   function(){return (S.intervals.blind_rise.to*100).toFixed(2)},
+  blindP:     function(){return S.intervals.blind_rise.p.toExponential(1).replace(/e-?(\d+)/,"×10<sup>-$1</sup>")},
+  shareRatio: function(){return S.intervals.share_ratio.ratio.toFixed(2)},
+  shareCI:    function(){var r=S.intervals.share_ratio;return r.lo.toFixed(2)+"–"+r.hi.toFixed(2)},
+  /* added 2026-10-02 (reviewer pass): RQ4 per-cause lifts, RQ5, TruthfulQA blind-spot count */
+  rq4Obs:     function(){return "+"+Math.round(S.intervals.rq4.obscurity.lift*100)},
+  rq4Mis:     function(){return "+"+Math.round(S.intervals.rq4.misconception.lift*100)},
+  rq4P:       function(){return S.intervals.rq4.misconception.p.toFixed(3)},
+  rq4Diss:    function(){return "+"+(S.intervals.rq4.dissociation.delta*100).toFixed(1)},
+  rq5Pc:      function(){return (S.intervals.rq5.rate*100).toFixed(1)},
+  rq5K:       function(){return String(S.intervals.rq5.neither)},
+  rq5N:       function(){return String(S.intervals.rq5.matched)},
+  rq5CI:      function(){var r=S.intervals.rq5;return (r.lo*100).toFixed(1)+"–"+(r.hi*100).toFixed(1)},
+  tqaSilent:  function(){var t=S.signal.by_dataset.filter(function(d){return d.dataset==="truthfulqa"})[0];return String(t.silent)},
+  k3rate:     function(){return abl(3)},
+  k2rate:     function(){return abl(2)}
+};
+function pc1(x){return (Math.round(x*1000+1e-9)/10).toFixed(1)}
+function judge(primary){
+  return S.arms.judges.filter(function(j){return (j.key===S.arms.primary)===primary})[0];
+}
+function dsN(name){
+  var r=S.signal.by_dataset.filter(function(d){return d.dataset===name})[0];
+  return r?r.n.toLocaleString():"?";
+}
+function aucRow(name){
+  return S.intervals.auc_by_dataset.filter(function(d){return d.dataset===name})[0];
+}
+function aucCI(name){
+  var r=aucRow(name);
+  return r?r.auc.toFixed(3)+" [95% CI "+r.lo.toFixed(3)+", "+r.hi.toFixed(3)+"]":"?";
+}
+function abl(k){
+  var r=S.ablation.by_size_2025.filter(function(d){return d.k===k})[0];
+  return r?(r.silent*100).toFixed(2):"?";
+}
+function dsAuc(name){
+  var r=S.signal.by_dataset.filter(function(d){return d.dataset===name})[0];
+  return r?r.auc.toFixed(3):"?";
+}
+/* Substitute {{token}} against FIG. An unknown token is left visible on the
+   page on purpose -- a rename that silently dropped a figure would put us back
+   where #47 started. */
+function F(k){return (S&&FIG[k])?FIG[k]():"…";}
+function sub(s){
+  if(!s)return s;
+  return String(s).replace(/\{\{(\w+)\}\}/g,function(m,k){
+    if(!S)return "…";
+    return FIG[k]?FIG[k]():m;
+  });
+}
+
+lvl({sp:-1,tag:"OVERVIEW",title:"The whole pipeline",kicker:"Fourteen levels, one continuous flow — one dangerous case.",
+  io:null,
+  why:"The thesis is one sentence: <strong>when models from different developers all agree and are all wrong &mdash; silent consensus &mdash; every disagreement-based detector reads &lsquo;safe&rsquo; and is wrong.</strong> Following the data end to end shows exactly where the borrowed signal stops and where this project&rsquo;s work &mdash; measuring that blind spot &mdash; starts.",whySkip:"you are left asserting novelty in prose, which is the thing the feedback asked you to stop doing.",
+  narr:"Questions enter at the top. Four models turn each one into four answers. Those answers are tested, stored, and split into a <strong>map</strong> of where questions live and a <strong>signal</strong> of who was wrong. The five research questions then probe that record &mdash; all built on the one case where the models agree <em>and</em> are wrong.",
+  note:"Use <b>next level →</b> to walk down. Nothing advances on its own. At every level the output on the right becomes the input on the left of the next.",
+  draw:function(t,now){
+    var stages=[
+      ["1–6","BUILD & TEST THE SIGNAL","sample · ask · grade · score · map · ROC vs baseline",C.teal,"borrowed"],
+      ["7–9","KEEP WHAT THEY DISCARD","the gap · store the record · check the grader by hand",C.blue,""],
+      ["10–13","FIVE RESEARCH QUESTIONS","measure · localize · persist · retrieval · RQ5 agentic search",C.amber,"ours"],
+      ["14","THE TOOL","five linked views, each view is a test",C.pink,""]
+    ];
+    var boxH=px(70),gapY=px(26),rh=boxH+gapY;
+    var x=W*.16,w=W*.70,top=H*.145;
+    var railX=x-px(34);
+    ctx.beginPath();ctx.moveTo(railX,top);ctx.lineTo(railX,top+rh*3+boxH);
+    ctx.strokeStyle=rgba(C.rule,.8*easeOut(t));ctx.lineWidth=px(1);ctx.stroke();
+    for(var k=0;k<10;k++){
+      var ph=((now/3000)+k/10)%1;
+      dot(railX,top+ph*(rh*3+boxH),px(3),C.teal,.75*Math.min(1,Math.min(ph,1-ph)*6)*easeOut(t));
+    }
+    stages.forEach(function(s,i){
+      var a=easeOut(stag(i,t,.13,.5));if(a<=0)return;
+      var y=top+i*rh,pad=px(16);
+      rect(x,y,w,boxH,{fill:s[3],fillA:.16*a,stroke:s[3],strokeA:.5*a,r:14});
+      var nOpt={size:18,font:FM,weight:700,color:s[3],alpha:a};
+      var nW=meas(s[0],nOpt);
+      txt(s[0],x+pad,y+px(42),nOpt);
+      var tx=x+pad+nW+px(18);
+      var tagW=s[4]?meas(s[4].toUpperCase(),{size:9,font:FM,weight:600})+px(20):0;
+      var avail=w-(tx-x)-pad-tagW;
+      fit(s[1],tx,y+px(30),avail,{size:14,font:FD,weight:700,color:C.ink,alpha:a});
+      fit(s[2],tx,y+px(53),avail,{size:10.5,color:C["ink-2"],alpha:a});
+      if(s[4])lab(s[4],x+w-pad,y+px(30),{align:"right",color:s[3],alpha:a*.9});
+      if(i<3)arw(x+w/2,y+boxH+px(4),x+w/2,y+boxH+gapY-px(4),{alpha:.6*a,color:s[3],head:5});
+    });
+  }});
+
+lvl({sp:0,tag:"LEVEL 1",title:"Sample the questions",kicker:"Four datasets in, one frozen corpus out.",
+  io:[["in","4 public datasets, by role"],["proc","load, dedupe, freeze — seed 42"],["out","{{questions}} questions, one frozen set"]],
+  tips:{i:"Four benchmarks chosen by ROLE, not volume. PopQA = obscurity (retrieval should fix it, and it ships a popularity number). TriviaQA = broad factual recall at volume. HaluEval = questions built to induce hallucination. TruthfulQA (non-adversarial only) = shared misconceptions (retrieval should NOT fix them).",p:"No screening. Every question in the frozen set is sent to all four models and graded — {{asked}} questions asked, {{answersAsked}} answers; after the ungradeable and duplicate questions are removed, {{questions}} questions and {{gens}} answers are analysed. A screening path exists in the codebase (screen.py: grade only the all-agree cases) and was built and tested, but it was NOT used for the headline run. Grading everything is what makes the base rates, the AUC and the paired generation comparison possible.",o:"{{questions}} analysed questions, written once and frozen, so the persistence test can re-run the identical set. The silent-consensus cases are an OUTPUT of grading at level 3, not an input filter."},
+  why:"Four datasets by <strong>role</strong>: PopQA supplies <em>obscurity</em> (retrieval should fix it), non-adversarial TruthfulQA supplies <em>shared misconceptions</em> (retrieval should not), and TriviaQA and HaluEval supply the volume and variety that make the rates estimable. SimpleQA was dropped for <strong>size</strong> — too small to carry a subgroup — and it also ran near the floor (91% of answers wrong for the 7–9B local ensemble, 74.6% hosted). AbstentionBench was designed in as the misconception arm and <strong>rejected on ingest</strong>: it ships a loading script, unsupported from <code>datasets</code> 4.0. The fixed seed makes the whole study re-runnable.",whySkip:"the persistence test has nothing to compare against, and no one can reproduce the numbers.",
+  narr:"Silent consensus is rare — about 1 question in {{silentOneIn}} — but the corpus is <strong>not</strong> screened down to it. All {{questions}} questions are asked and graded, so every rate on this page is measured against the whole set rather than a filtered slice.",
+  note:"Each dataset earns its place by the role it plays in a later question. <b>PopQA is the retrieval positive control</b> (Wikidata-backed, answers guaranteed retrievable); non-adversarial TruthfulQA is the misconception arm, where retrieval is predicted to fail (RQ4).<br><br><b>TruthfulQA is small</b> — {{nTruthfulqa}} questions after filtering — and every number resting on it carries an interval about {{tqaWidthX}} times wider than TriviaQA's, and about {{tqaWidthBig}} times wider than PopQA's or HaluEval's (AUC {{tqaAucCI}}, against {{tvaAucCI}} on TriviaQA). Quote it with the interval attached, never bare.<br><br><b>Deduplicated by content, not by id.</b> {{dups}} questions were removed because they were the same question twice: TriviaQA's no-context split lists each question once per evidence source, and some PopQA rows repeat template, subject and answer exactly. Every earlier check worked on question ids, which are unique by construction — unique ids are not unique questions.",
+  draw:function(t,now){
+    var b=boxes(),a=easeOut(t);
+    shell(b.i,"input","4 datasets · by role",C.teal,t);
+    shell(b.p,"process","freeze the corpus",C.amber,t);
+    shell(b.o,"output","the frozen question set",C.pink,t);
+    /* Real counts, read off summary.json (datasets + signal.by_dataset).
+       Four rows, not three: TriviaQA and HaluEval carry two thirds of the
+       corpus and were missing from this diagram entirely. */
+    var D=[["PopQA",F("nPopqa")+" · obscurity","retrieval SHOULD fix (RQ4)",C.teal],
+           ["TriviaQA",F("nTriviaqa")+" · broad recall","the volume arm",C.blue],
+           ["HaluEval",F("nHalueval")+" · hallucination-prone","built to induce errors",C.amber],
+           ["TruthfulQA",F("nTruthfulqa")+" · non-adversarial","shared misconceptions",C.violet]];
+    var pad=px(12),inner=b.i.w-pad*2,y0=bodyTop(b.i);
+    D.forEach(function(d,i){
+      var aa=easeOut(stag(i,t,.09,.4));if(aa<=0)return;
+      var y=y0+i*px(68);
+      rect(b.i.x+px(8),y,b.i.w-px(16),px(58),{fill:d[3],fillA:.13*aa,stroke:d[3],strokeA:.5*aa,r:10});
+      fit(d[0],b.i.x+pad+px(4),y+px(18),inner,{size:12.5,weight:700,color:d[3],alpha:aa});
+      fit(d[1],b.i.x+pad+px(4),y+px(33),inner,{size:9.5,font:FM,color:C["ink-3"],alpha:aa});
+      fit(d[2],b.i.x+pad+px(4),y+px(48),inner,{size:9.5,font:FM,color:C.lime,alpha:.9*aa});
+    });
+    var pc={x:b.p.x+b.p.w/2,y:b.p.y+b.p.h*.46};
+    if(a>.3){
+      glow(pc.x,pc.y,px(64),C.amber,.18*a);
+      rect(pc.x-px(76),pc.y-px(34),px(152),px(68),{fill:C.amber,fillA:.12,stroke:C.amber,strokeA:.55*a,r:12});
+      txt("keep every question",pc.x,pc.y-px(6),{size:14,font:FM,weight:700,align:"center",color:C.amber,alpha:a});
+      txt("dedupe · freeze · seed 42",pc.x,pc.y+px(16),{size:9.5,font:FM,align:"center",color:C["ink-2"],alpha:a});
+    }
+    tools(b.p,["HuggingFace datasets","numpy RNG (seed 42)"],t);
+    stream(now,{count:20,x0:b.i.x+b.i.w,xm:pc.x-px(76),xm2:pc.x+px(76),x1:b.o.x,
+      y0:function(i){return y0+(i%4)*px(68)+px(28);},ym:pc.y,
+      y1:function(i){return b.o.y+b.o.h*(.28+((i*7)%20)/20*.5);},
+      cIn:C.teal,cOut:C.pink,alpha:a});
+    if(a>.5){
+      txt(F("questions"),b.o.x+b.o.w/2,b.o.y+b.o.h*.46,
+        {size:26,font:FM,weight:700,align:"center",color:C.pink,alpha:(a-.5)*2});
+      lab("questions, frozen",b.o.x+b.o.w/2,b.o.y+b.o.h*.46+px(20),{align:"center",alpha:(a-.5)*2});
+    }
+  }});
+
+lvl({sp:1,tag:"LEVEL 2",title:"Ask the four models",kicker:"One question in, four answers out.",
+  io:[["in","one question, identical prompt"],["proc","4 open-weight models, 4 makers, hosted"],["out","4 answers + a confidence each"]],
+  tips:{i:"A single question, sent to every model with byte-identical prompt text so no model gets an easier version of the task.",p:"Four open-weight models from four different companies, served by a hosted API at 24 concurrent workers. The number of models matters less than their INDEPENDENCE — four models that fail on the same questions give a weak signal. That correlation was measured on the full corpus rather than assumed, and it is HIGH: within each dataset the mean pairwise φ runs {{phiMin}}–{{phiMax}}. The earlier 2024 arm (Llama-3.1-8B, Qwen2.5-7B, Mistral-7B-v0.3, Gemma-2-9B) did run locally, one at a time at 4-bit on an 8 GB laptop GPU, and is used only for the generation comparison at RQ3.",o:"Four answer strings, plus a confidence for each: the model's own token probabilities averaged and exponentiated, giving 0 to 1."},
+  why:"Four <strong>different makers</strong>, because two models from the same family share training data and therefore share mistakes. What matters is <strong>decorrelated errors, not raw capability</strong>: four excellent models that fail on the same questions are weak here, while four ordinary ones that fail differently are exactly what the method needs. <strong>This is the assumption the whole disagreement heuristic rests on, and measuring it is the main finding of this project</strong> — see the red panel.",whySkip:"you are back to one model checking itself, which is blind to the confident, repeated errors this whole project is about.",
+  narr:"Four different makers is <em>supposed</em> to mean four independent brains with independent mistakes. <strong>It does not.</strong> Measured on all {{questions}} questions and compared <em>within the same dataset</em>, the four are wrong together <strong>{{strRatio}}× as often</strong> as independence predicts — watch which model is answering, then read the red panel.",
+  note:"Because the models are open-weight, each answer also yields its token log-probabilities. <b>Confidence = exp(mean log p)</b>, the inverse of perplexity. Many black-box APIs withhold this; the provider used here exposes it, which is what made the hosted run possible at all.<br><br><b>The diversity risk, measured.</b> The method assumes these four fail <i>differently</i>. They are all web-corpus trained, and the earlier version of this page said the correlation was <i>worth measuring before committing</i>. It was measured, on the full corpus rather than a slice, and the assumption does not hold:<br><br><b>— all four wrong together, within the same dataset: {{strObs}} questions observed against {{strExp}} expected under independence — {{strRatio}}× (95% CI {{strCI}})</b><br><b>— mean pairwise error correlation within each dataset φ = {{phiMin}}–{{phiMax}}</b> (independence would be 0)<br><br><b>Why the within-dataset figure leads.</b> Pooled over the whole corpus the numbers look larger — all four wrong on {{poolObs}}% against {{poolExp}}% predicted, {{poolRatio}}×, φ {{poolPhi}} — but that multiplies error rates averaged over datasets whose difficulty differs several-fold, and pooling alone manufactures co-failure: every model is wrong far more often on PopQA than on TriviaQA, so pooled across datasets the four look more correlated than they are within any one. Comparing within a dataset removes that. The pooled figure is kept, and demoted.<br><br>Per-model error rates, pooled: {{modelErr}}.<br><br><b>Why this is the finding and not just a flaw.</b> Disagreement-based detectors rely on the assumption this measurement refutes. One plausible cause, not tested here, is that all four learned from much of the same web — in which case a differently-trained model would reduce the correlation but not remove it. The {{silentRate}}% of questions where the four are not merely jointly wrong but <i>identically</i> wrong is where the heuristic is not weakened but blind.<br><br><b>Quantization caveat.</b> The 2024 comparison arm runs 4-bit, so some of its measured disagreement could be a quantization artifact. The quantization level is <b>identical across all four</b> models in that arm so the noise is uniform, and a q8 replication bounds it: safe for rates, not for membership — about a third of which questions are blind spots changes with precision, so no single question should be read as settled.",
+  draw:function(t,now){
+    var b=boxes(),a=easeOut(t);
+    shell(b.i,"input","one question",C.teal,t);
+    shell(b.p,"process","the ensemble",C.amber,t);
+    shell(b.o,"output","4 answers + confidence",C.pink,t);
+    var qy=b.i.y+b.i.h*.42,pad=px(12);
+    rect(b.i.x+px(8),qy-px(34),b.i.w-px(16),px(68),{fill:C.teal,fillA:.12*a,stroke:C.teal,strokeA:.5*a,r:10});
+    wrapFit("“What is the capital of Australia?”",b.i.x+pad+px(4),qy-px(12),b.i.w-px(32),
+      {size:11.5,color:C.ink,alpha:a,lh:17,maxLines:3});
+    /* The HEADLINE roster. This diagram used to show the 2024 local arm
+       (Llama-3.1-8B / Qwen2.5-7B / Mistral-7B-v0.3 / Gemma-2-9B), which is
+       the OLD side of the RQ3 comparison, not the models these results come
+       from. Second line is that model's own error rate on the corpus. */
+    var ER=function(m){return S?(S.independence.error_rates[m]*100).toFixed(1)+"% wrong":"…"};
+    var M=[["Qwen3-235B","Alibaba · "+ER("Qwen3-235B")],["Gemma-3-27B","Google · "+ER("Gemma-3-27B")],
+           ["Llama-4-Maverick","Meta · "+ER("Llama-4-Maverick")],["Mistral-Small-3.2","Mistral · "+ER("Mistral-Small-3.2")]];
+    var A=[["Canberra",".99",C.green],["Canberra",".98",C.green],["Canberra",".97",C.green],["Sydney",".30",C.red]];
+    var live=Math.floor(now/1200)%4,y0=bodyTop(b.p),rowH=px(52);
+    for(var i=0;i<4;i++){
+      var aa=easeOut(stag(i,t,.09,.42));if(aa<=0)continue;
+      var y=y0+i*rowH,on=i===live,mw=b.p.w*.54;
+      if(on)glow(b.p.x+px(14)+mw/2,y+px(22),px(66),C.amber,.2);
+      rect(b.p.x+px(14),y,mw,px(44),
+        {fill:on?C.amber:C["surface-2"],fillA:on?.18:.5*aa,stroke:on?C.amber:C.rule,strokeA:aa,r:10});
+      var vram=on?meas("ANSWERING",{size:9,font:FM,weight:600})+px(20):0;
+      fit(M[i][0],b.p.x+px(26),y+px(20),mw-px(24)-vram,{size:12,weight:700,color:on?C.amber:C.ink,alpha:aa});
+      fit(M[i][1],b.p.x+px(26),y+px(35),mw-px(24),{size:9.5,font:FM,color:C["ink-3"],alpha:aa});
+      if(on)lab("answering",b.p.x+px(14)+mw-px(10),y+px(20),{align:"right",color:C.amber,alpha:1});
+      var oy=b.o.y+b.o.h*.20+i*px(58);
+      arw(b.p.x+px(14)+mw+px(6),y+px(22),b.o.x-px(5),oy+px(20),{alpha:.4*aa,color:C.pink,head:4});
+      rect(b.o.x+px(8),oy,b.o.w-px(16),px(42),{fill:A[i][2],fillA:.1*aa,stroke:A[i][2],strokeA:.45*aa,r:9});
+      fit(A[i][0],b.o.x+px(18),oy+px(20),b.o.w-px(36),{size:12,weight:700,color:C.ink,alpha:aa});
+      fit("conf "+A[i][1],b.o.x+px(18),oy+px(35),b.o.w-px(36),{size:9.5,font:FM,color:A[i][2],alpha:aa});
+    }
+    var aD=easeOut(stag(6,t,.09,.5));
+    if(aD>0){
+      /* pin it above the tools strip (rule sits at h-36) so it can never
+         collide with it, but never let it ride up into the model rows */
+      var dh=px(96),dy=Math.max(y0+4*rowH+px(14),b.p.y+b.p.h-px(52)-dh),
+          dpad=px(14),dw=b.p.w-px(28);
+      rect(b.p.x+dpad,dy,dw,dh,
+        {fill:C.red,fillA:.08*aD,stroke:C.red,strokeA:.4*aD,r:10});
+      labFit("the assumption this level rests on — and it is false",b.p.x+dpad+px(12),dy+px(20),dw-px(24),
+        {color:C.red,alpha:aD,weight:700});
+      wrapFit("Four makers only helps if they fail DIFFERENTLY. Within a dataset, error correlation φ is "+F("phiMin")+"–"+F("phiMax")+", not 0.",
+        b.p.x+dpad+px(12),dy+px(40),dw-px(24),
+        {size:10.5,color:C.ink,alpha:aD,lh:14,maxLines:2});
+      wrapFit("All four wrong, same dataset: "+F("strObs")+" vs "+F("strExp")+" if independent — "+F("strRatio")+"×.",
+        b.p.x+dpad+px(12),dy+px(74),dw-px(24),
+        {size:9.5,font:FM,color:C["ink-2"],alpha:aD,lh:13,maxLines:2});
+    }
+    tools(b.p,["DeepInfra · hosted API","24 concurrent workers","content-digest identity check"],t);
+    stream(now,{count:9,x0:b.i.x+b.i.w,xm:b.p.x+px(14),xm2:b.p.x+px(14)+b.p.w*.54,x1:b.o.x,
+      y0:function(){return qy;},ym:y0+px(90),
+      y1:function(i){return b.o.y+b.o.h*.20+(i%4)*px(58)+px(20);},
+      cIn:C.teal,cOut:C.pink,alpha:a,hideMid:true,r:2.4});
+  }});
+
+lvl({sp:2,tag:"LEVEL 3",title:"Grade every answer",kicker:"Automatic — no human grades correctness.",
+  io:[["in","4 answers + the dataset's answer key"],["proc","4 tests: exact → alias → contains → meaning"],["out","right / wrong per answer"]],
+  tips:{i:"The four raw answer strings, plus the gold answer and its accepted aliases from the dataset.",p:"Four tests run in order, stopping at the first that succeeds: exact match, alias, contains, then meaning (cosine ≥ 0.80). Only answers that fail the three cheap tests reach the fourth. TruthfulQA is graded by entailment (NLI) instead.",o:"One right/wrong flag per answer, so four flags per question. Produced automatically — the answer key comes with the dataset."},
+  why:"You cannot claim &ldquo;disagreement predicts error&rdquo; without knowing <strong>who was actually wrong</strong>. Grading supplies that truth. Note the split: the answer key is used to <strong>evaluate</strong> the signal, never to compute it.",whySkip:"you have a number that correlates with nothing you can check &mdash; an unfalsifiable claim rather than a finding.",
+  narr:"Cheapest first. Exact string match, then the dataset's <strong>alias list</strong>, then whether the key is <strong>contained</strong> in the answer, then a <strong>semantic match</strong> — cosine similarity between sentence-transformer embeddings. Anything that passes none is graded wrong. TruthfulQA is graded by entailment (NLI) instead.",
+  note:"Plain string comparison would fail “It’s Canberra, the capital.” The embedding rescues paraphrase — cosine <b>0.88</b> → correct. Cosine cannot see negation, so it decides only a small share of answers (2.5% are marked correct by it); its limits are reported in Chapter 4 (§4.4).",
+  draw:function(t,now){
+    var b=boxes(),a=easeOut(t);
+    shell(b.i,"input","4 answers + key",C.teal,t);
+    shell(b.p,"process","4-test grader",C.amber,t);
+    shell(b.o,"output","right / wrong",C.pink,t);
+    var IN=["Canberra","Canberra","It’s Canberra, the capital","Sydney"],y0=bodyTop(b.i);
+    IN.forEach(function(s,i){
+      var aa=easeOut(stag(i,t,.06,.4));if(aa<=0)return;
+      var y=y0+i*px(48);
+      rect(b.i.x+px(8),y,b.i.w-px(16),px(38),{fill:C.teal,fillA:.1*aa,stroke:C.teal,strokeA:.35*aa,r:9});
+      wrapFit(s,b.i.x+px(18),y+px(22),b.i.w-px(36),{size:10.5,color:C.ink,alpha:aa,lh:14,maxLines:2});
+    });
+    fit("gold key: “Canberra”",b.i.x+px(12),y0+4*px(48)+px(22),b.i.w-px(24),
+      {size:10,font:FM,color:C["ink-3"],alpha:a});
+    var T=[["test 1 · exact","lowercase, strip articles",C.teal],
+           ["test 2 · alias","“JFK” = “John F. Kennedy”",C.blue],
+           ["test 3 · contains","key found inside the answer",C.green],
+           ["test 4 · meaning","cosine similarity ≥ 0.80",C.amber]];
+    /* rows sized from their own content, and the third tier gets extra height
+       because it carries the longest explanation */
+    var py=bodyTop(b.p),pad=px(18),inner=b.p.w-pad*2,rowH=px(48),gapR=px(10);
+    var yCur=py;
+    T.forEach(function(r,i){
+      var aa=easeOut(stag(i,t,.12,.45));if(aa<=0){yCur+=rowH+gapR;return;}
+      rect(b.p.x+pad,yCur,inner,rowH,{fill:r[2],fillA:.1*aa,stroke:r[2],strokeA:.45*aa,r:10});
+      fit(r[0],b.p.x+pad+px(14),yCur+px(20),inner-px(28),{size:12.5,weight:700,color:r[2],alpha:aa});
+      wrapFit(r[1],b.p.x+pad+px(14),yCur+px(37),inner-px(28),
+        {size:10,font:FM,color:C["ink-2"],alpha:aa,lh:13,maxLines:1});
+      if(i<3)arw(b.p.x+b.p.w/2,yCur+rowH+px(2),b.p.x+b.p.w/2,yCur+rowH+gapR-px(3),{alpha:.4*aa,head:4});
+      yCur+=rowH+gapR;
+    });
+    var ex=easeOut(stag(4,t,.09,.5));
+    if(ex>0){
+      var exH=px(64);
+      rect(b.p.x+pad,yCur,inner,exH,{fill:C.green,fillA:.1*ex,stroke:C.green,strokeA:.4*ex,r:10});
+      wrapFit("“It’s Canberra, the capital”   vs gold   “Canberra”",
+        b.p.x+pad+px(14),yCur+px(24),inner-px(28),{size:11,color:C.ink,alpha:ex,lh:15,maxLines:1});
+      fit("exact ✗  alias ✗  contains ✗  cosine 0.88 → CORRECT",
+        b.p.x+pad+px(14),yCur+px(46),inner-px(28),{size:11,font:FM,color:C.green,alpha:ex});
+    }
+    tools(b.p,["sentence-transformers","all-MiniLM-L6-v2 · 384-d"],t);
+    var oy=bodyTop(b.o);
+    for(var i=0;i<4;i++){
+      var aa=easeOut(stag(i,t,.06,.4)),ok=i<3,y=oy+i*px(46);
+      txt(ok?"✓":"✗",b.o.x+px(20),y+px(20),{size:16,font:FM,weight:700,color:ok?C.green:C.red,alpha:aa});
+      fit(ok?"correct":"wrong",b.o.x+px(46),y+px(19),b.o.w-px(66),{size:11,color:C["ink-2"],alpha:aa});
+    }
+    stream(now,{count:12,x0:b.i.x+b.i.w,xm:b.p.x+pad,xm2:b.p.x+b.p.w-pad,x1:b.o.x,
+      y0:function(i){return y0+(i%4)*px(48)+px(19);},ym:py+px(90),
+      y1:function(i){return oy+(i%4)*px(46)+px(16);},
+      cIn:C.teal,cOut:C.green,alpha:a,hideMid:true,r:2.4});
+  }});
+
+lvl({sp:3,tag:"LEVEL 4",title:"Score the disagreement",kicker:"Four answers in, one number out.",
+  io:[["in","4 answers + 4 confidences"],["proc","group by meaning → count → spread"],["out","one disagreement score, 0 to 0.75"]],
+  tips:{i:"The four answers and their four confidence values from Level 2. The answer key is deliberately NOT used here.",p:"Answers with the same meaning are merged into one group. The headline score (AUC {{auc}}) simply counts heads: 1 minus the largest group's share. A tested variant weights each group by the sum of its members' confidences, so a hesitant vote counts less (AUC {{aucw}}).",o:"A single number from 0 (all four agree) to 0.75 (all four give different answers). This is the disagreement signal itself."},
+  why:"Two design choices do the work. <strong>Grouping by meaning</strong> stops &ldquo;JFK&rdquo; and &ldquo;John F. Kennedy&rdquo; counting as a fight. <strong>Weighting by confidence</strong> was tested as a way to stop one hesitant outlier looking like a real split; it is a variant (AUC {{aucw}}), and the headline {{auc}} uses the plain head-count score.",whySkip:"the score is mostly noise: paraphrase inflates it, and a single unsure model can fake a serious disagreement.",
+  narr:"Group the answers by <strong>meaning</strong> so paraphrase isn't counted as disagreement. The score is <strong>1 minus the largest group's share</strong> of the four answers: 0 when all four agree, 0.75 when all four differ. This head-count score is the headline (AUC {{auc}}). A variant that weights each group by the <strong>summed confidence</strong> of its members adds almost nothing at this scale.",
+  note:"This score uses <b>no answer key at all</b> — that is what makes the signal label-free. Confidence weighting is the white-box option: it needs token probabilities. It was tested as a variant ({{aucw}} against the head-count {{auc}}) and is not the headline score.",
+  draw:function(t,now){
+    var b=boxes(),a=easeOut(t);
+    shell(b.i,"input","4 answers + confidence",C.teal,t);
+    shell(b.p,"process","group · weight · spread",C.amber,t);
+    shell(b.o,"output","disagreement score",C.pink,t);
+    var A=[["Canberra",".99"],["Canberra",".98"],["Canberra",".97"],["Sydney",".30"]],y0=bodyTop(b.i);
+    A.forEach(function(r,i){
+      var aa=easeOut(stag(i,t,.05,.35)),y=y0+i*px(30);
+      fit(r[0],b.i.x+px(16),y,b.i.w*.6,{size:11.5,color:C.ink,alpha:aa});
+      txt(r[1],b.i.x+b.i.w-px(16),y,{size:10.5,font:FM,align:"right",color:i<3?C.green:C.red,alpha:aa});
+    });
+    var pad=px(18),py=bodyTop(b.p);
+    var g1=easeOut(stag(2,t,.1,.5));
+    if(g1>0){
+      labFit("grouped by meaning, weighted by confidence",b.p.x+pad,py,b.p.w-pad*2,{alpha:g1,color:C.amber});
+      [["Canberra ×3",2.94,C.teal],["Sydney ×1",.30,C.red]].forEach(function(g,i){
+        var w=(b.p.w-pad*2-px(70))*(g[1]/3.24)*g1,y=py+px(14)+i*px(50);
+        rect(b.p.x+pad,y,Math.max(w,px(60)),px(36),{fill:g[2],fillA:.22,stroke:g[2],strokeA:.6*g1,r:9});
+        fit(g[0],b.p.x+pad+px(10),y+px(23),Math.max(w,px(60))-px(20),{size:11,weight:700,color:C.ink,alpha:g1});
+        txt("w "+g[1].toFixed(2),b.p.x+pad+Math.max(w,px(60))+px(10),y+px(23),
+          {size:10,font:FM,color:C["ink-3"],alpha:g1});
+      });
+      var g2=easeOut(stag(5,t,.1,.5));
+      if(g2>0){
+        var sy=py+px(122);
+        fit("largest share  0.91",b.p.x+pad,sy,b.p.w-pad*2,{size:11,font:FM,color:C["ink-2"],alpha:g2});
+        fit("head-count (the headline score): 3-vs-1 split → 0.25",b.p.x+pad,sy+px(20),b.p.w-pad*2,
+          {size:10,font:FM,color:C["ink-3"],alpha:g2});
+      }
+    }
+    tools(b.p,["sentence-transformers (grouping)","token log-probs (weights)"],t);
+    var g3=easeOut(stag(7,t,.1,.5));
+    if(g3>0){
+      var cx=b.o.x+b.o.w/2,cy=b.o.y+b.o.h*.40;
+      glow(cx,cy,px(56),C.amber,.22*g3);
+      txt("0.09",cx,cy+px(10),{size:34,font:FM,weight:700,align:"center",color:C.amber,alpha:g3});
+      lab("weighted variant · head-count 0.25",cx,cy+px(32),{align:"center",alpha:g3});
+      wrapFit("a lone, unsure dissenter is weak disagreement",b.o.x+px(12),cy+px(60),b.o.w-px(24),
+        {size:10.5,italic:true,color:C["ink-2"],alpha:g3,lh:15});
+    }
+    stream(now,{count:11,x0:b.i.x+b.i.w,xm:b.p.x+pad,xm2:b.p.x+b.p.w-pad,x1:b.o.x,
+      y0:function(i){return y0+(i%4)*px(30)-px(4);},ym:py+px(60),
+      y1:function(){return b.o.y+b.o.h*.40;},
+      cIn:C.teal,cOut:C.amber,alpha:a,hideMid:true,r:2.4});
+  }});
+
+lvl({sp:4,tag:"LEVEL 5",title:"Place it on the map",kicker:"384 dimensions in, two out — and four uses.",
+  io:[["in","question text · score · right-wrong"],["proc","position from meaning, colour toggled"],["out","the headline visual test"]],
+  tips:{i:"Two separate inputs. The question WORDING decides where a dot lands. The Level 4 disagreement SCORE decides what colour it is. Neither one knows about the other.",p:"The sentence-transformer turns wording into 384 numbers of meaning and UMAP squeezes that to 2 for position. The score is then painted on top as colour — it is never used to compute position.",o:"Each question gets (x, y) from its meaning. The colour then toggles between the Level 4 disagreement score and the Level 3 right/wrong grade. If the same regions light up under both, disagreement really is tracking error — that comparison is the headline test of the whole hypothesis."},
+  why:"Yes: the map is built from <strong>both</strong>. Embedding gives every question a position from its meaning; the Level 4 score is then applied as colour. They are kept on separate paths for two reasons. First, <strong>non-circularity</strong> &mdash; if you positioned questions using disagreement, then &ldquo;high-disagreement questions cluster&rdquo; would be true by construction and prove nothing; because position comes from wording alone, any colour pattern is a real finding. Second, <strong>localization depends on it</strong> &mdash; a brand-new question can be embedded and placed on the map without running a single model, which is the only reason a new question can be routed before it is answered. On its own, Level 4 gives thousands of separate numbers; joined to position they become <strong>regions</strong>, and three of the five research questions are claims about regions rather than about individual questions.",whySkip:"you would have scores with no geometry: localization has no neighbourhood to average over, persistence has nothing to overlay, and the retrieval test has no strata to separate. And if you instead laid questions out <em>by</em> their scores, the headline result would be circular &mdash; true by construction, worth nothing.",
+  narr:"The map has <strong>two inputs, not one</strong>. The question wording is embedded and flattened by UMAP to decide <strong>where</strong> each dot sits. The Level 4 disagreement score is then painted on as <strong>colour</strong>. Position and colour are computed by completely separate paths.",
+  note:"This separation is deliberate. If position were derived from the disagreement score, high-disagreement questions would sit together <b>by construction</b> and the finding would be circular. Because position comes from wording alone — which never sees a model answer — any clustering of colour is a genuine result.",
+  draw:function(t,now){
+    var b=boxes(),a=easeOut(t);
+    shell(b.i,"input","two inputs, two channels",C.teal,t);
+    shell(b.p,"process","embed → reduce → colour",C.amber,t);
+    shell(b.o,"output","what the map enables",C.pink,t);
+    /* The map takes TWO inputs: the question text decides WHERE a dot sits,
+       the Level 4 score decides WHAT COLOUR it is. Showing only the first
+       made it look as if disagreement never reached the map. */
+    var y0=bodyTop(b.i),iw=b.i.w-px(26);
+    labFit("from level 1 · question text",b.i.x+px(12),y0,iw,{alpha:a,color:C.teal,weight:700});
+    ["capital of…","who wrote…","when did…","who directed…"].forEach(function(s,i){
+      var aa=easeOut(stag(i,t,.05,.35)),y=y0+px(12)+i*px(28);
+      rect(b.i.x+px(10),y,iw,px(22),{fill:C.teal,fillA:.1*aa,r:6});
+      fit(s,b.i.x+px(20),y+px(15),iw-px(20),{size:9.5,font:FM,color:C["ink-2"],alpha:aa});
+    });
+    var aPos=easeOut(stag(4,t,.07,.4));
+    fit("→ decides WHERE the dot sits",b.i.x+px(12),y0+px(142),iw,
+      {size:10,font:FM,weight:700,color:C.teal,alpha:aPos});
+    ctx.beginPath();ctx.moveTo(b.i.x+px(12),y0+px(158));ctx.lineTo(b.i.x+px(12)+iw,y0+px(158));
+    ctx.strokeStyle=rgba(C.rule,.9*a);ctx.lineWidth=px(1);ctx.stroke();
+    var aScore=easeOut(stag(5,t,.07,.45));
+    labFit("from level 4 · disagreement score",b.i.x+px(12),y0+px(182),iw,
+      {alpha:aScore,color:C.amber,weight:700});
+    [".09",".62",".77",".14"].forEach(function(v,i){
+      var aa=easeOut(stag(6+i,t,.05,.35)),y=y0+px(194)+i*px(28);
+      var hot=parseFloat(v);
+      rect(b.i.x+px(10),y,iw,px(22),{fill:mix(C.teal,C.amber,hot),fillA:.16*aa,r:6});
+      fit(v,b.i.x+px(20),y+px(15),iw-px(20),
+        {size:9.5,font:FM,color:mix(C.teal,C.amber,hot),alpha:aa});
+    });
+    var aCol=easeOut(stag(10,t,.06,.4));
+    fit("→ decides WHAT COLOUR it is",b.i.x+px(12),y0+px(324),iw,
+      {size:10,font:FM,weight:700,color:C.amber,alpha:aCol});
+    var pad=px(20),py=bodyTop(b.p),v=easeOut(stag(2,t,.1,.5));
+    if(v>0){
+      labFit("384-dim embedding",b.p.x+pad,py,b.p.w-pad*2,{alpha:v,color:C.amber});
+      var vx=b.p.x+pad,vw=b.p.w-pad*2;
+      for(var k=0;k<44;k++){
+        var hgt=px(6+20*Math.abs(Math.sin(k*1.7+now/1400)));
+        rect(vx+k*(vw/44),py+px(36)-hgt,vw/44-px(1.6),hgt,{fill:mix(C.teal,C.violet,k/44),fillA:.75*v,r:1});
+      }
+      var u=easeOut(stag(4,t,.1,.5));
+      if(u>0){
+        arw(b.p.x+b.p.w/2,py+px(46),b.p.x+b.p.w/2,py+px(66),{alpha:.6*u,color:C.amber,head:5});
+        txt("UMAP",b.p.x+b.p.w/2,py+px(92),{size:17,font:FM,weight:700,align:"center",color:C.amber,alpha:u});
+        wrapFit("flattens 384 → 2 while keeping neighbours together",
+          b.p.x+b.p.w/2,py+px(112),b.p.w-pad*2,
+          {size:10.5,align:"center",color:C["ink-2"],alpha:u,lh:15,maxLines:2});
+      }
+      var m=easeOut(stag(6,t,.1,.6));
+      if(m>0){
+        /* The proposal's "headline visual test": same positions, colour toggled
+           between disagreement and who was actually wrong. If the same regions
+           light up under both, the hypothesis holds. */
+        var showErr=(Math.floor(now/3200)%2)===1;
+        drawMap({x:b.p.x+pad,y:py+px(126),w:b.p.w-pad*2,h:b.p.h-px(250)},
+          showErr?"error":"heat",m,now);
+        var capY=b.p.y+b.p.h-px(96);
+        fit("position from meaning  ·  colour toggling",b.p.x+b.p.w/2,capY,b.p.w-pad*2,
+          {size:11,font:FM,weight:700,align:"center",color:C.ink,alpha:m});
+        var tw=b.p.w-pad*2,tx=b.p.x+pad;
+        [["disagreement",!showErr,C.amber],["actual error",showErr,C.red]].forEach(function(o2,i){
+          var w=tw/2-px(6),x=tx+i*(tw/2+px(6));
+          rect(x,capY+px(10),w,px(26),
+            {fill:o2[2],fillA:o2[1]?.22:.05,stroke:o2[2],strokeA:o2[1]?.9:.25,r:8});
+          fit(o2[0],x+w/2,capY+px(27),w-px(12),
+            {size:10.5,font:FM,weight:700,align:"center",
+             color:o2[2],alpha:o2[1]?1:.45});
+        });
+        wrapFit("do the same regions light up both ways? that comparison is the headline test",
+          b.p.x+b.p.w/2,capY+px(54),b.p.w-pad*2,
+          {size:10,italic:true,align:"center",color:C["ink-2"],alpha:m,lh:14,maxLines:2});
+      }
+    }
+    tools(b.p,["sentence-transformers","UMAP (n_neighbors, min_dist)"],t);
+    /* single-line titles (fit shrinks rather than wraps) so the body text below
+       can never be crowded by a second title line */
+    var uses=[["fault regions visible","a cluster of amber is a whole unstable topic, not one row",C.amber],
+              ["silent-consensus zones","RQ1 locates where all-agree-all-wrong concentrates",C.violet],
+              ["density, popularity-controlled","RQ2 tests clustering beyond obscurity",C.teal],
+              ["old vs new maps","RQ3 overlays two generations for persistence",C.blue]];
+    var oy=bodyTop(b.o),pad2=px(16);
+    uses.forEach(function(u2,i){
+      var aa=easeOut(stag(3+i,t,.09,.45));if(aa<=0)return;
+      var y=oy+i*px(76);
+      rect(b.o.x+px(8),y,b.o.w-px(16),px(64),{fill:u2[2],fillA:.1*aa,stroke:u2[2],strokeA:.4*aa,r:10});
+      fit(u2[0],b.o.x+pad2,y+px(21),b.o.w-px(36),{size:11.5,weight:700,color:u2[2],alpha:aa});
+      wrapFit(u2[1],b.o.x+pad2,y+px(40),b.o.w-px(36),
+        {size:9.5,color:C["ink-2"],alpha:aa,lh:13,maxLines:2});
+    });
+  }});
+
+lvl({sp:5,tag:"LEVEL 6",title:"Test it against a fair baseline",kicker:"Same budget. One model, or four?",
+  io:[["in","the same questions for both arms"],["proc","4 generations, allocated two ways"],["out","two ROC-AUC numbers"]],
+  tips:{i:"Both arms see the identical question set and are graded against the identical answer key, so nothing but the method differs.",
+    p:"Semantic Entropy is the standard single-model detector: ask ONE model the same question several times at temperature, group its own answers by meaning, and measure the spread. High spread = the model is unsure. FaultLines instead asks four DIFFERENT models once each. Same number of generations either way — the only variable is whether they come from one brain or four.",
+    o:"How to read it. 0.5 = the score ranks errors no better than a coin flip; 0.7 is respectable for hallucination detection; 0.8 is strong. On the same {{basen}} questions the full run measured {{baseCross}} for the ensemble against the best single model's {{single}} — CROSS HIGH, SINGLE LOW, which is the hoped-for result — diversity carries information self-sampling cannot. BOTH HIGH means the cheaper single-model detector already suffices, and the contribution rests on the map and the five research questions rather than on a better signal. CROSS LOW, SINGLE HIGH would contradict the published result and most likely mean the four ensemble models (17–27B active, four makers) are too alike, or the grouping threshold is mis-tuned. BOTH LOW means the signal does not work on this data and Levels 7-14 lose their foundation."},
+  why:"A number on its own means nothing &mdash; AUC {{auc}} is only impressive next to something. The baseline is <strong>Semantic Entropy</strong>, the standard single-model detector: sample one model several times and measure how much it contradicts <em>itself</em>. Running it on the same questions turns &ldquo;four models beat one&rdquo; from an assumption into a measurement. The design point is that <strong>both arms get the same generation budget</strong> &mdash; four generations per question either way &mdash; so the main thing that differs is whether those four come from one model or four different ones. That isolates model diversity as the main variable. What is <strong>matched</strong>: the budget of four answers per question, the same sentence-transformer and threshold for grouping answers, and the same answer key. The temperatures <strong>differ</strong>, by necessity: the ensemble answers at temperature 0, while Semantic Entropy samples at 1.0, because it needs varied samples from one model to measure anything.",
+  whySkip:"you report a lone AUC with nothing to compare it to, and a reviewer can fairly say the same result might come from any single model sampled four times &mdash; which is the cheaper, already-published method.",
+  narr:"The baseline is <strong>Semantic Entropy</strong> (Kuhn 2023; Farquhar, Nature 2024). It asks <strong>one</strong> model the same question several times, groups its own answers by meaning, and measures the spread — self-inconsistency. FaultLines asks <strong>four different</strong> models once each. Same budget of four answers; the main difference is where they come from (the temperatures differ too — see the note).",
+  note:"<b>What is matched:</b> four answers per question in both arms, the <b>same sentence-transformer and threshold</b> to group answers, and the same answer key. <b>What is not:</b> temperature. The ensemble answers at <b>0</b>; the baseline samples at <b>1.0</b> (the value the Semantic Entropy papers use), since sampling one model at 0 would return the same answer four times. <b>Result, and it reversed between scales.</b> On the 300-question pilot the best single model's Semantic Entropy BEAT the ensemble. At full scale it does not: cross-model disagreement <b>{{baseCross}}</b> vs the best single model's <b>{{single}}</b> ({{singleName}}), on the same {{basen}} questions at a matched budget of four answers either way ({{auc}} is the ensemble's AUC on all {{questions}}). <b>Quote the full-scale pair and never the pilot's</b> — the reversal is itself recorded, in RESULTS claim 2. Detection was never the contribution regardless: the map and the five research questions are things a single-model score cannot produce.<br><br><b>What a high AUC will NOT tell you.</b> (1) Nothing about the <b>all-agree-all-wrong</b> cases — they score exactly zero, are graded errors (about four in five genuine after adjudication), and drag the AUC down, which is exactly why RQ1 measures silent consensus as the hero question; a strong AUC and a large blind spot can coexist. (2) Nothing about <b>where</b> the errors are — one number cannot say “obscure mid-century films”. That is what the map adds, which is why this level is the project\u2019s foundation rather than its result.",
+  draw:function(t,now){
+    var b=boxes(),a=easeOut(t);
+    shell(b.i,"input","the same questions",C.teal,t);
+    shell(b.p,"process","4 generations, two ways",C.amber,t);
+    shell(b.o,"output","two AUCs, compared",C.pink,t);
+
+    var y0=bodyTop(b.i),iw=b.i.w-px(26);
+    ["capital of…","who wrote…","when did…","who directed…"].forEach(function(q,i){
+      var aa=easeOut(stag(i,t,.05,.35)),y=y0+i*px(30);
+      rect(b.i.x+px(10),y,b.i.w-px(20),px(24),{fill:C.teal,fillA:.1*aa,r:6});
+      fit(q,b.i.x+px(20),y+px(16),b.i.w-px(40),{size:9.5,font:FM,color:C["ink-2"],alpha:aa});
+    });
+    var aN=easeOut(stag(4,t,.07,.45));
+    wrapFit("identical set, identical answer key — both arms are graded the same way",
+      b.i.x+px(12),y0+px(146),iw,{size:10,color:C["ink-2"],alpha:aN,lh:14,maxLines:3});
+
+    var pad=px(16),py=bodyTop(b.p),inner=b.p.w-pad*2;
+    var live=Math.floor(now/900)%4;
+
+    // ---- arm A : the baseline, one model sampled four times
+    var aA=easeOut(stag(1,t,.1,.5));
+    if(aA>0){
+      labFit("baseline · semantic entropy",b.p.x+pad,py,inner,{color:C["ink-3"],alpha:aA,weight:700});
+      rect(b.p.x+pad,py+px(10),inner,px(86),
+        {fill:C["ink-3"],fillA:.07*aA,stroke:C["ink-3"],strokeA:.35*aA,r:10});
+      rect(b.p.x+pad+px(10),py+px(22),inner*.30,px(30),
+        {fill:C.blue,fillA:.16*aA,stroke:C.blue,strokeA:.5*aA,r:8});
+      fit("ONE model",b.p.x+pad+px(20),py+px(42),inner*.30-px(20),
+        {size:10.5,font:FM,weight:700,color:C.blue,alpha:aA});
+      for(var k=0;k<4;k++){
+        var cx=b.p.x+pad+inner*.42+k*(inner*.13),on=(k===live);
+        rect(cx,py+px(24),inner*.11,px(26),
+          {fill:C.blue,fillA:on?.3:.12,stroke:C.blue,strokeA:on?.9*aA:.3*aA,r:6});
+        fit("s"+(k+1),cx+inner*.055,py+px(41),inner*.10,
+          {size:9,font:FM,align:"center",color:C.blue,alpha:aA});
+      }
+      fit("asked 4× at temperature — spread of its OWN answers",
+        b.p.x+pad+px(10),py+px(74),inner-px(20),
+        {size:9.5,font:FM,color:C["ink-2"],alpha:aA});
+    }
+    // ---- arm B : ours, four different models once each
+    var aB=easeOut(stag(3,t,.1,.5));
+    if(aB>0){
+      var by=py+px(110);
+      labFit("ours · cross-model disagreement",b.p.x+pad,by,inner,{color:C.amber,alpha:aB,weight:700});
+      rect(b.p.x+pad,by+px(10),inner,px(86),
+        {fill:C.amber,fillA:.09*aB,stroke:C.amber,strokeA:.5*aB,r:10});
+      var MN=["Llama","Qwen","Mistral","Gemma"];
+      for(var k2=0;k2<4;k2++){
+        var cx2=b.p.x+pad+px(10)+k2*(inner*.235),on2=(k2===live);
+        rect(cx2,by+px(24),inner*.21,px(30),
+          {fill:C.amber,fillA:on2?.3:.12,stroke:C.amber,strokeA:on2?.9*aB:.35*aB,r:7});
+        fit(MN[k2],cx2+inner*.105,by+px(44),inner*.19,
+          {size:9.5,font:FM,weight:700,align:"center",color:C.amber,alpha:aB});
+      }
+      fit("asked once each — spread ACROSS four different makers",
+        b.p.x+pad+px(10),by+px(74),inner-px(20),
+        {size:9.5,font:FM,color:C["ink-2"],alpha:aB});
+    }
+    var aC=easeOut(stag(5,t,.1,.5));
+    if(aC>0){
+      var cy=py+px(216);
+      glow(b.p.x+b.p.w/2,cy+px(4),px(76),C.violet,.13*aC);
+      wrapFit("4 generations per question either way — the main variable is one brain or four",
+        b.p.x+b.p.w/2,cy,inner,
+        {size:11,align:"center",weight:700,color:C.violet,alpha:aC,lh:15,maxLines:2});
+      var aM=easeOut(stag(7,t,.1,.5));
+      if(aM>0){
+        var my=cy+px(36);
+        rect(b.p.x+pad,my,inner,px(64),
+          {fill:C.green,fillA:.08*aM,stroke:C.green,strokeA:.35*aM,r:10});
+        labFit("matched across both arms",b.p.x+pad+px(12),my+px(19),inner-px(24),
+          {color:C.green,alpha:aM,weight:700});
+        wrapFit("4 answers · same grouping + threshold · same key · temperature 0 vs 1.0",
+          b.p.x+pad+px(12),my+px(38),inner-px(24),
+          {size:10,font:FM,color:C["ink-2"],alpha:aM,lh:14,maxLines:2});
+      }
+    }
+    tools(b.p,["scikit-learn · roc_auc_score","temp 0 (ensemble) · 1.0 (SE)","same sentence-transformer for both arms"],t);
+
+    // ---- output : one ROC per arm, then how to read the number
+    var oy=bodyTop(b.o),cur=oy;
+    var gx=b.o.x+px(30),gw=b.o.w-px(46),gh=gw*.58,gy=cur;
+    var aR=easeOut(stag(4,t,.1,.55));
+    if(aR>0){
+      rect(gx,gy,gw,gh,{fill:C["surface-2"],fillA:.35*aR,stroke:C.rule,strokeA:.7*aR,r:8});
+      ctx.setLineDash([px(3),px(3)]);ctx.beginPath();
+      ctx.moveTo(gx,gy+gh);ctx.lineTo(gx+gw,gy);
+      ctx.strokeStyle=rgba(C["ink-3"],.55*aR);ctx.lineWidth=px(1);ctx.stroke();ctx.setLineDash([]);
+      [[.55,C["ink-3"],1.8],[.34,C.amber,3]].forEach(function(cv,i){
+        var ca=easeOut(stag(5+i*1.4,t,.1,.55));if(ca<=0)return;
+        ctx.beginPath();ctx.moveTo(gx,gy+gh);
+        for(var k3=0;k3<=48;k3++){var u=k3/48;if(u>ca)break;
+          ctx.lineTo(gx+u*gw,gy+gh-Math.pow(u,cv[0])*gh);}
+        ctx.strokeStyle=rgba(cv[1],1);ctx.lineWidth=px(cv[2]);ctx.stroke();
+      });
+      labFit("false positive rate",gx,gy+gh+px(14),gw,{alpha:aR});
+    }
+    cur=gy+gh+px(26);
+    var aO=easeOut(stag(8,t,.1,.55));
+    if(aO>0){
+      [["cross-model · 4 makers",C.amber,"baseCross"],["single-model · baseline",C["ink-3"],"single"]].forEach(function(r,i){
+        var y=cur+i*px(42);
+        rect(b.o.x+px(8),y,b.o.w-px(16),px(36),
+          {fill:r[1],fillA:.1*aO,stroke:r[1],strokeA:.45*aO,r:9});
+        labFit(r[0],b.o.x+px(18),y+px(15),b.o.w-px(36),{color:r[1],alpha:aO});
+        fit("AUC "+F(r[2])+" · "+F("basen")+" shared questions",b.o.x+px(18),y+px(29),b.o.w-px(36),
+          {size:10,font:FM,color:C.violet,alpha:aO});
+      });
+    }
+    cur+=px(94);
+    /* the scale, so a number can be judged the moment it lands */
+    var aS=easeOut(stag(10,t,.08,.5));
+    if(aS>0){
+      labFit("how to read the number",b.o.x+px(12),cur,b.o.w-px(24),
+        {color:C.lime,alpha:aS,weight:700});
+      [["0.50","coin flip — useless",C["ink-3"]],
+       ["0.70","respectable here",C.teal],
+       ["0.80","strong",C.green],
+       ["0.95+","suspect a grading leak",C.red]].forEach(function(r,i){
+        var y=cur+px(19)+i*px(19),aa=easeOut(stag(11+i,t,.05,.35));
+        if(aa<=0)return;
+        dot(b.o.x+px(17),y-px(3),px(3),r[2],aa);
+        fit(r[0],b.o.x+px(26),y,px(44),{size:10,font:FM,weight:700,color:r[2],alpha:aa});
+        fit(r[1],b.o.x+px(74),y,b.o.w-px(88),{size:10,color:C["ink-2"],alpha:aa});
+      });
+    }
+    stream(now,{count:10,x0:b.i.x+b.i.w,xm:b.p.x+pad,xm2:b.p.x+b.p.w-pad,x1:b.o.x,
+      y0:function(i){return y0+(i%4)*px(30)+px(12);},ym:py+px(110),
+      y1:function(i){return gy+gh*.5;},
+      cIn:C.teal,cOut:C.amber,alpha:a,hideMid:true,r:2.4});
+  }});
+
+lvl({sp:6,tag:"LEVEL 7",title:"What the paper stops at",kicker:"Same signal. Everything after this is the difference.",
+  io:[["in","the reproduced Detect result"],["proc","compare what is produced vs what is kept"],["out","the gap FaultLines fills"]],
+  tips:{i:"The result just reproduced in Level 6 — the same finding the published papers report.",p:"A direct comparison of what those papers hand you versus what this project retains and builds.",o:"The specific list of capabilities that do not exist in the prior work. Levels 8 to 14 build exactly these."},
+  why:"This is the level that answers the feedback directly. The signal is the <strong>same</strong>; what happens to it is not. Putting the two side by side makes the contribution concrete instead of rhetorical.",whySkip:"the honest answer to &ldquo;isn't this already done?&rdquo; has to be improvised, which is exactly where the last review went badly.",
+  narr:"Hamidieh et al. (ICLR 2026) and Gorbett &amp; Jana (2026) produce <strong>one number per question</strong> and a calibration curve — then stop. Producing that number required a rich record, and they discard it.",
+  note:"This level is the argument for the whole project: <b>same signal, different ending</b>. Everything to the right of the divider is what the next seven levels (8–14) build.",
+  draw:function(t,now){
+    var a=easeOut(t),midX=W*.5;
+    var pad=px(20),colW=W*.40,ly=H*.17,rowH=px(46);
+    var THEM=["a scalar per question","a calibration / abstention curve","black-box: no token probabilities","one benchmark, one snapshot","no map, no regions","no human in the loop"];
+    var US=["the full record, persisted","a map of where faults concentrate","white-box confidence, where the vote is blind","4 datasets · 2 model generations","silent consensus: measured, localized, tracked","retrieval dissociation tested"];
+    rect(W*.045,ly-px(34),colW,rowH*6+px(52),{fill:C["ink-3"],fillA:.07*a,stroke:C["ink-3"],strokeA:.35*a,r:14});
+    rect(midX+px(14),ly-px(34),colW,rowH*6+px(52),{fill:C.amber,fillA:.09*a,stroke:C.amber,strokeA:.5*a,r:14});
+    labFit("what the published work produces",W*.045+pad,ly-px(10),colW-pad*2,{color:C["ink-3"],alpha:a,weight:700});
+    labFit("what FaultLines keeps and adds",midX+px(14)+pad,ly-px(10),colW-pad*2,{color:C.amber,alpha:a,weight:700});
+    ctx.setLineDash([px(4),px(6)]);
+    ctx.beginPath();ctx.moveTo(midX+px(4),ly-px(30));ctx.lineTo(midX+px(4),ly+rowH*6+px(14));
+    ctx.strokeStyle=rgba(C.violet,.5*a);ctx.lineWidth=px(1.4);ctx.stroke();ctx.setLineDash([]);
+    for(var i=0;i<6;i++){
+      var aa=easeOut(stag(i,t,.08,.42));if(aa<=0)continue;
+      var y=ly+px(18)+i*rowH;
+      txt("✕",W*.045+pad,y,{size:11,font:FM,weight:700,color:C["ink-3"],alpha:aa*.8});
+      wrapFit(THEM[i],W*.045+pad+px(22),y,colW-pad*2-px(24),
+        {size:11,color:C["ink-2"],alpha:aa,lh:15,maxLines:2});
+      txt("✓",midX+px(14)+pad,y,{size:11,font:FM,weight:700,color:C.amber,alpha:aa});
+      wrapFit(US[i],midX+px(14)+pad+px(22),y,colW-pad*2-px(24),
+        {size:11,color:C.ink,alpha:aa,lh:15,maxLines:2});
+      var ph=((now/2000)+i/6)%1;
+      dot(W*.045+colW+(midX+px(14)-(W*.045+colW))*ph,y-px(4),px(2.4),C.violet,
+        .7*Math.min(1,Math.min(ph,1-ph)*6)*aa);
+    }
+    var f=easeOut(stag(7,t,.1,.5));
+    if(f>0){
+      var y=ly+rowH*6+px(44);
+      fit("the signal is the same — what happens to it is not",midX,y,W*.8,
+        {size:13,italic:true,align:"center",color:C.violet,alpha:f});
+    }
+  }});
+
+lvl({sp:7,tag:"LEVEL 8",title:"Store the record",kicker:"Kept, indexed, and split two ways.",
+  io:[["in","the full record for every question"],["proc","written to columnar parquet on disk"],["out","a MAP branch and a SIGNAL branch"]],
+  tips:{i:"Everything computed so far for one question, as one row: answers, grades, confidences, map position, metadata.",p:"Parquet files under data/. One row per question in records.parquet, one row per answer in answers.parquet, and the 384-d question vectors in their own file so they do not bloat the record table. A Postgres + pgvector schema was designed for this level and never needed: a corpus of this size is a file, not a database.",o:"Two views of the same stored record. Findings read whichever branch they need; nothing is recomputed."},
+  why:"Prior work computes the score and drops the rest. <strong>Keeping the record is the contribution</strong> &mdash; every finding downstream is only possible because the answers, grades, confidences and coordinates still exist. Because the vectors are kept too, &ldquo;questions near this fault&rdquo; is a nearest-neighbour query over the stored array rather than a re-run.",whySkip:"every finding would need the four models re-run from scratch &mdash; hours of GPU time per question you already answered.",
+  narr:"The record is <strong>persisted</strong>, not held in memory: four answer texts, four grades, four confidences, the embedding, the map position and the entity metadata. Then it splits, and every finding downstream reads one branch or the other.",
+  note:"The 384-d question vectors live in <code>question_vectors.parquet</code>, so “find questions semantically near this fault line” is a scikit-learn NearestNeighbors call over an array already in memory (see <code>rq2_localize.py</code>). <b>No database and no vector service run anywhere in this project.</b> A Postgres + pgvector tier was in the original design and was dropped once the corpus turned out to fit comfortably in files — the whole record table is a few megabytes. Keeping it would have added an operational dependency that can be down on the day of an evaluation, and bought nothing.",
+  draw:function(t,now){
+    var a=easeOut(t);
+    var rec=["4 answer texts","4 right/wrong grades","4 confidences","384-d embedding","(x, y) map position","popularity + metadata"];
+    var rx=W*.04,rw=W*.235,ry=H*.17,rh=px(58)+rec.length*px(28);
+    rect(rx,ry,rw,rh,{fill:C.teal,fillA:.08*a,stroke:C.teal,strokeA:.45*a,r:14});
+    labFit("the record, per question",rx+px(14),ry+px(24),rw-px(28),{color:C.teal,alpha:a,weight:700});
+    rec.forEach(function(r,i){
+      var aa=easeOut(stag(i,t,.055,.38));if(aa<=0)return;
+      dot(rx+px(22),ry+px(50)+i*px(28),px(2.8),C.teal,aa);
+      fit(r,rx+px(34),ry+px(54)+i*px(28),rw-px(48),{size:11,color:C["ink-2"],alpha:aa});
+    });
+    var dx=W*.335,dw=W*.20,dh=px(168),dy=ry+px(30);
+    var d=easeOut(stag(4,t,.09,.5));
+    if(d>0){
+      glow(dx+dw/2,dy+dh/2,px(84),C.blue,.14*d);
+      rect(dx,dy,dw,dh,{fill:C.blue,fillA:.12*d,stroke:C.blue,strokeA:.6*d,r:14});
+      txt("parquet",dx+dw/2,dy+px(34),{size:15,font:FD,weight:700,align:"center",color:C.blue,alpha:d});
+      ["records · one per question","answers · one per model per question","question_vectors","handlabels · 430"].forEach(function(tb,i){
+        fit("· "+tb,dx+px(22),dy+px(62)+i*px(22),dw-px(40),{size:10.5,font:FM,color:C["ink-2"],alpha:d});
+      });
+      labFit("files on disk, no server",dx+px(22),dy+dh-px(16),dw-px(40),{color:C.blue,alpha:d});
+      arw(rx+rw,ry+rh*.45,dx-px(6),dy+dh*.5,{alpha:.65*d,color:C.teal,head:5});
+    }
+    var f=easeOut(stag(6,t,.1,.55));
+    if(f>0){
+      var bx=W*.60,bw=W*.36,bh=px(118),gapY=px(36);
+      var topY=dy+dh/2-bh-gapY/2;
+      [[topY,"MAP branch","embedding · (x, y) position","base map · cause regions · drift comparison",C.amber],
+       [topY+bh+gapY,"SIGNAL branch","grades · disagreement · confidence","silent-consensus grid · confidence signal",C.red]]
+      .forEach(function(br){
+        var y=br[0],pad=px(16),inner=bw-pad*2;
+        rect(bx,y,bw,bh,{fill:br[4],fillA:.1*f,stroke:br[4],strokeA:.55*f,r:14});
+        fit(br[1],bx+pad,y+px(28),inner,{size:14,font:FD,weight:700,color:br[4],alpha:f});
+        labFit("carries",bx+pad,y+px(50),px(60),{alpha:f});
+        fit(br[2],bx+pad+px(66),y+px(50),inner-px(66),{size:10,font:FM,color:C["ink-2"],alpha:f});
+        labFit("feeds",bx+pad,y+px(76),px(60),{alpha:f});
+        wrapFit(br[3],bx+pad+px(66),y+px(76),inner-px(66),
+          {size:10.5,color:C.ink,alpha:f,lh:16,maxLines:2});
+        arw(dx+dw,dy+dh*.5,bx-px(6),y+bh*.5,{alpha:.6*f,color:br[4],head:5});
+      });
+      for(var k=0;k<10;k++){
+        var ph=((now/2100)+k/10)%1,up=k%2===0;
+        var sx=dx+dw,sy=dy+dh*.5,ey=(up?topY:topY+bh+gapY)+bh*.5;
+        dot(sx+(bx-sx)*ph,sy+(ey-sy)*ph,px(2.8),up?C.amber:C.red,
+          .9*Math.min(1,Math.min(ph,1-ph)*6)*f);
+      }
+    }
+  }});
+
+lvl({sp:8,tag:"LEVEL 9",title:"Check the grader by hand",kicker:"The human step — small, bounded, and blinded.",
+  io:[["in","graded TruthfulQA answers — 2 blinded strata"],["proc","one verdict per answer, machine grade hidden"],["out","{{handlabels}} verdicts + a grader error rate"]],
+  tips:{i:"Two strata, shuffled together so the labeller cannot tell them apart: every low-NLI-margin case (where the automatic grader is least sure) plus a seeded random control sample. Without the control the exercise cannot be interpreted — labelling only the hard cases measures the grader at its worst and calls it the average.",p:"For each answer you read the question, the model's answer and every accepted gold answer, then say whether the answer is correct, wrong, or genuinely unclear. The machine verdict and the NLI margin are NEVER shown. Autosaves after every case; resumable.",o:"{{handlabels}} verdicts. On the {{gcJudged}} judged target cases the automatic grader was generous {{gcGenerous}} times and harsh {{gcHarsh}} times. Agreement with the machine is high on the control stratum and low on the low-margin target stratum — exactly the shape you want: the grader is reliable in general and unreliable precisely where it says it is unsure."},
+  why:"&ldquo;Label-free&rdquo; applies to the <strong>signal</strong>, not to the analysis. Whether an answer is genuinely wrong or merely worded differently from the answer key is a judgement no metric makes, and it decides whether silent consensus is a real phenomenon or a grading artifact. These {{handlabels}} verdicts — all on TruthfulQA answers, where the automatic grader is weakest — were the first audit of the grader. The artifact rate itself is now <strong>measured rather than argued about</strong>: a blind adjudication pass over the {{artifactTotal}} blind spots ({{artifactJudged}} decided) finds {{artifactPc}}% of them are grading artifacts (95% CI {{artifactCI}}%).",whySkip:"RQ1 cannot separate genuine silent consensus from grading noise, and the headline number rests on trusting an automatic grader that has never been audited.",
+  narr:"The only place a human touches the data. A blinded command-line pass shows the question, one model's answer and the accepted gold answers — never the machine's verdict — and asks one question: <strong>correct, wrong, or cannot tell?</strong> {{handlabels}} verdicts on TruthfulQA answers, across two strata the labeller cannot distinguish.",
+  note:"<b>What this is not.</b> An earlier design had these labels training a cause classifier that would then tag the remaining thousands automatically, and splitting errors into obscurity / staleness / misconception. <b>No classifier was ever built</b>, and the RQ4 cause strata are rule-based instead (rarest PopQA entities for obscurity, TruthfulQA errors for misconception) — which is more auditable and needs no training data. This panel used to describe the classifier as though it existed; it did not.<br><br><b>Two things this panel used to call open are now measured.</b> The hand labels were first compared with the <i>machine</i> grader. Agreement between humans was measured separately: a second annotator labelled {{irrN}} cases and agrees with the first at Cohen's κ = {{irrKappa}}. And the grading-artifact rate is no longer the one-annotator bound this level once reported; it comes from a blind adjudication pass: {{artifactPc}}% of the blind spots.",
+  draw:function(t,now){
+    var b=boxes(),a=easeOut(t);
+    shell(b.i,"input","2 blinded strata",C.teal,t);
+    shell(b.p,"process","one verdict per answer",C.amber,t);
+    shell(b.o,"output","the grader error rate",C.pink,t);
+    var y0=bodyTop(b.i);
+    ["low margin — grader unsure","low margin — grader unsure","random control","low margin — grader unsure"]
+    .forEach(function(s,i){
+      var aa=easeOut(stag(i,t,.06,.4)),y=y0+i*px(44);
+      rect(b.i.x+px(8),y,b.i.w-px(16),px(34),{fill:C.teal,fillA:.1*aa,stroke:C.teal,strokeA:.3*aa,r:9});
+      wrapFit(s,b.i.x+px(18),y+px(21),b.i.w-px(36),{size:10.5,color:C.ink,alpha:aa,lh:13,maxLines:2});
+    });
+    var pad=px(18),py=bodyTop(b.p),inner=b.p.w-pad*2;
+    /* The three keys handlabel.py actually accepts. It used to show cause
+       tags (obscurity / staleness / misconception) that this pass never
+       produced — those strata are rule-based, see the note. */
+    var TAGS=[["wrong","the answer really is wrong",C.red],
+              ["correct","“Sheppey” vs “Isle of Sheppey”",C["ink-3"]],
+              ["unclear","cannot tell from the key",C["ink-3"]]];
+    var liveTag=Math.floor(now/1400)%TAGS.length;
+    TAGS.forEach(function(g,i){
+      var aa=easeOut(stag(i,t,.09,.42));if(aa<=0)return;
+      var y=py+i*px(56),on=i===liveTag;
+      if(on)glow(b.p.x+pad+inner/2,y+px(20),px(60),C.amber,.16);
+      rect(b.p.x+pad,y,inner,px(44),
+        {fill:on?C.amber:g[2],fillA:on?.16:.07*aa,stroke:on?C.amber:g[2],strokeA:(on?.7:.35)*aa,r:10});
+      fit(g[0],b.p.x+pad+px(12),y+px(20),inner*.45,
+        {size:12,weight:700,color:on?C.amber:(i?C["ink-2"]:C.red),alpha:aa});
+      fit(g[1],b.p.x+pad+px(12),y+px(35),inner-px(24),{size:9.5,font:FM,color:C["ink-3"],alpha:aa});
+      if(on)labFit("clicked",b.p.x+pad+inner-px(70),y+px(20),px(60),{color:C.amber,alpha:1});
+    });
+    tools(b.p,["handlabel.py · blinded CLI","autosaves to handlabels.parquet"],t);
+    var o=easeOut(stag(5,t,.1,.5)),oy=bodyTop(b.o);
+    if(o>0){
+      rect(b.o.x+px(8),oy,b.o.w-px(16),px(70),{fill:C.pink,fillA:.1*o,stroke:C.pink,strokeA:.45*o,r:10});
+      txt(F("handlabels"),b.o.x+b.o.w/2,oy+px(34),{size:24,font:FM,weight:700,align:"center",color:C.pink,alpha:o});
+      labFit("blinded verdicts",b.o.x+px(16),oy+px(54),b.o.w-px(32),{align:"left",alpha:o});
+      arw(b.o.x+b.o.w/2,oy+px(78),b.o.x+b.o.w/2,oy+px(96),{alpha:.6*o,color:C.pink,head:5});
+      rect(b.o.x+px(8),oy+px(104),b.o.w-px(16),px(126),{fill:C.violet,fillA:.1*o,stroke:C.violet,strokeA:.45*o,r:10});
+      fit("grader audit",b.o.x+px(18),oy+px(130),b.o.w-px(36),{size:13,font:FD,weight:700,color:C.violet,alpha:o});
+      wrapFit(F("gcJudged")+" target cases judged: "+F("gcGenerous")+" graded too generously, "+F("gcHarsh")+" too harshly. Agreement with the machine: high on control, low on low-margin.",
+        b.o.x+px(18),oy+px(150),b.o.w-px(36),{size:10,color:C["ink-2"],alpha:o,lh:14,maxLines:5});
+      wrapFit("artifact rate now measured by blind adjudication: "+F("artifactPc")+"%",
+        b.o.x+px(12),oy+px(252),b.o.w-px(24),{size:10,font:FM,color:C.lime,alpha:o,lh:14,maxLines:2});
+    }
+    stream(now,{count:11,x0:b.i.x+b.i.w,xm:b.p.x+pad,xm2:b.p.x+b.p.w-pad,x1:b.o.x,
+      y0:function(i){return y0+(i%4)*px(44)+px(16);},ym:py+px(90),
+      y1:function(){return oy+px(34);},
+      cIn:C.teal,cOut:C.pink,alpha:a,hideMid:true,r:2.4});
+  }});
+
+function findingLevel(o){
+  return function(t,now){
+    var b=boxes(),a=easeOut(t);
+    shell(b.i,"input",o.inSub,C.teal,t);
+    shell(b.p,"process",o.procSub,C.amber,t);
+    shell(b.o,"output",o.outSub,C.pink,t);
+    o.mid(b,t,now,a);
+    if(o.tools)tools(b.p,o.tools,t);
+    if(o.mapVariant){
+      var m=easeOut(stag(4,t,.1,.6));
+      if(m>0)drawMap({x:b.o.x+px(8),y:bodyTop(b.o),w:b.o.w-px(16),h:b.o.h-px(78)},o.mapVariant,m,now);
+    }
+    stream(now,{count:11,x0:b.i.x+b.i.w,xm:b.p.x+px(18),xm2:b.p.x+b.p.w-px(18),x1:b.o.x,
+      y0:function(i){return b.i.y+b.i.h*(.3+((i*7)%10)/10*.4);},ym:b.p.y+b.p.h*.5,
+      y1:function(i){return b.o.y+b.o.h*(.3+((i*5)%10)/10*.4);},
+      cIn:C.teal,cOut:o.outColor||C.pink,alpha:a,hideMid:true,r:2.4});
+  };
+}
+
+lvl({sp:9,tag:"RQ1 · MEASURE",title:"Measure silent consensus",kicker:"When all four agree — and all four are wrong.",
+  io:[["in","the Level 4 score × the Level 3 grade"],["proc","isolate all-agree-all-wrong; read confidence"],["out","the blind spot, named and quantified"]],
+  tips:{i:"'Agreement' is the Level 4 score: did the four answers collapse into one meaning group, or split? 'Correctness' is the Level 3 grade: did the answer match the gold key?",p:"Crossing those two gives four cases. The dangerous one is bottom-right: all four models agreed AND all four were wrong. Vote-counting is blind here by construction — but the ensemble's confidence is not.",o:"How many silent-consensus cases exist, where they sit, and whether confidence can flag them. Measured: confidence separates error at AUC {{rq1auc}} in exactly this region — better than the vote's 0.5, and far too weak to act on alone."},
+  why:"This is the hero question. Every disagreement detector reads silent consensus as <strong>safe</strong> and is wrong. Prior work on correlated errors measures the phenomenon, but not this region for a disagreement detector on factual questions; doing so &mdash; and showing a white-box confidence signal survives where the black-box vote dies &mdash; is the contribution.",whySkip:"the project presents a detector while staying silent about the one error class it structurally cannot see.",
+  narr:"<strong>Agreement</strong> is the Level 4 score; <strong>correctness</strong> is the Level 3 grade. Crossing them exposes the blind spot: <strong>all four agree AND all four are wrong</strong>, so the vote fires nothing. The claim: ensemble <strong>confidence</strong> still separates right from wrong there — the full run measures AUC <strong>{{rq1auc}}</strong> across all {{unanimous}} agreement-region questions, where vote-counting is 0.5 by construction.",
+  note:"Kim et al. (2025), ‘Correlated errors in large language models’, shows models agree on wrong answers more than chance, so this <b>does not claim to discover the phenomenon</b> — it names, locates and quantifies it, and adds the confidence signal a black-box method cannot have.",
+  draw:findingLevel({inSub:"score × grade",procSub:"the 2×2 grid + confidence",outSub:"silent regions",
+    outColor:[167,139,250],mapVariant:"audit",tools:["blind spots from all 4 datasets","token log-probs (white-box)"],
+    mid:function(b,t,now,a){
+      var cells=[["agree · right","the easy case",C.green],["disagree · right","noisy but fine",C["ink-3"]],
+                 ["disagree · wrong","the signal works",C.amber],["agree · wrong","SILENT — invisible",C.violet]];
+      var cellTip=[
+        "All four models gave the same answer and it matched the gold key. The ordinary, easy case: the detector correctly stays quiet.",
+        "The four models split, but the answer was still graded correct. A FALSE ALARM — disagreement fired when no error existed. Usually paraphrase or a question with several valid answers.",
+        "The four models split AND the answer was wrong. The case the method is built on: disagreement fired and there really was an error. A true positive.",
+        "All four agreed and all four were wrong. Disagreement is near zero, so the vote reports nothing while a genuine error passes through. This is silent consensus — invisible to every disagreement detector. Ensemble confidence still separates these from correct all-agree cases at AUC {{rq1auc}} — better than the vote, and nowhere near good enough to act on alone."];
+      var pad=px(20),py=bodyTop(b.p),gw=(b.p.w-pad*2)/2,gh=px(74);
+      cells.forEach(function(cl,i){
+        var aa=easeOut(stag(i,t,.1,.45));if(aa<=0)return;
+        var x=b.p.x+pad+(i%2)*gw,y=py+((i/2)|0)*gh,hot=i===3;
+        if(hot)glow(x+gw/2,y+gh/2,px(58),C.violet,.22*(.5+.5*Math.sin(now/620)));
+        rect(x+px(4),y+px(4),gw-px(8),gh-px(10),
+          {fill:cl[2],fillA:(hot?.2:.07)*aa,stroke:cl[2],strokeA:(hot?.8:.35)*aa,r:10});
+        fit(cl[0],x+px(16),y+px(28),gw-px(46),{size:11,font:FM,weight:700,color:cl[2],alpha:aa});
+        fit(cl[1],x+px(16),y+px(48),gw-px(32),{size:10.5,color:hot?C.ink:C["ink-2"],alpha:aa});
+        qmark(x+gw-px(22),y+px(24),cl[0].toUpperCase(),cellTip[i]);
+      });
+      var nt=easeOut(stag(5,t,.1,.5));
+      if(nt>0)wrapFit("the vote is silent here — but confidence is only AUC "+(S?S.rq1.agree_auc.toFixed(3):"…"),
+        b.p.x+pad,py+2*gh+px(20),b.p.w-pad*2,{size:10.5,italic:true,color:C.violet,alpha:nt,lh:14,maxLines:2});
+    }})});
+
+lvl({sp:10,tag:"RQ2 · LOCALIZE",title:"Localize the blind spots",kicker:"Do they cluster — beyond just obscurity?",
+  io:[["in","question wording + entity popularity"],["proc","map density, controlled for popularity"],["out","characterizable error regions"]],
+  tips:{i:"Where a question sits on the map comes from its wording alone — never from any model's answer — so any clustering of error is a real finding, not a construction.",p:"Two things predict a fault region: how obscure the entity is (popularity) and how crowded its neighbourhood on the map is. The test is whether error clusters carry signal BEYOND popularity.",o:"Regions where silent consensus concentrates. The finding only holds if it survives a popularity control — otherwise it reduces to the known long-tail effect."},
+  why:"If shared errors just tracked obscurity, this would be a <strong>known 2023 result</strong> (Kandpal; Mallen). The claim is stronger: blind spots cluster in characterizable regions and carry signal <em>beyond</em> popularity. Measured on the full corpus: popularity correlates with error at <strong>{{corrPop}}</strong> and neighbourhood density at <strong>{{corrDensityIn}}</strong> (PopQA, n={{corrN}}) — and controlling for popularity, density still adds to the AUC.",whySkip:"‘errors concentrate somewhere’ is not a finding unless the regions are characterizable and the clustering beats both chance and popularity.",
+  narr:"Do the blind spots scatter at random, or concentrate? Position comes from <strong>wording alone</strong>, so clustering of error is genuine. And it must survive a <strong>popularity control</strong> — it does: on {{corrN}} PopQA questions, popularity correlates with error at {{corrPop}} while neighbourhood density correlates at {{corrDensityIn}}, and density adds to the AUC on top of popularity. Two densities are reported and they are not interchangeable: {{corrDensity}} over the shared map — what this tool draws, and what a user brushing a region actually sees — and {{corrDensityIn}} recomputed within PopQA, which is what the control requires, because roughly a quarter of a PopQA question’s fifteen map-neighbours come from a different dataset.",
+  note:"Position from wording is what makes this non-circular and lets an <em>unanswered</em> question be placed on the map — which is what RQ4 needs to route a new question before paying for it.",
+  draw:findingLevel({inSub:"facts about the question",procSub:"density, popularity-controlled",outSub:"error regions",
+    outColor:[251,191,36],mapVariant:"forecast",tools:["sentence-transformers · UMAP","PopQA popularity"],
+    mid:function(b,t,now,a){
+      var pad=px(18),py=bodyTop(b.p),inner=b.p.w-pad*2;
+      [["entity popularity","log Wikipedia pageviews · ships with PopQA"],
+       ["neighbourhood density","share of its 15 nearest map neighbours that are wrong"]].forEach(function(f,i){
+        var aa=easeOut(stag(i,t,.1,.45));if(aa<=0)return;
+        var y=py+i*px(56);
+        rect(b.p.x+pad,y,inner,px(44),{fill:C.teal,fillA:.09*aa,stroke:C.teal,strokeA:.4*aa,r:9});
+        fit(f[0],b.p.x+pad+px(12),y+px(20),inner-px(24),{size:12,weight:700,color:C.teal,alpha:aa});
+        fit(f[1],b.p.x+pad+px(12),y+px(36),inner-px(24),{size:9.5,font:FM,color:C["ink-3"],alpha:aa});
+      });
+      var pz=easeOut(stag(3,t,.1,.5));
+      if(pz>0){
+        var cy=py+px(140);
+        glow(b.p.x+b.p.w/2,cy,px(60),C.amber,.16*pz);
+        rect(b.p.x+b.p.w/2-px(94),cy-px(26),px(188),px(52),
+          {fill:C.amber,fillA:.12,stroke:C.amber,strokeA:.55*pz,r:11});
+        txt("beyond popularity",b.p.x+b.p.w/2,cy+px(6),
+          {size:13,font:FM,weight:700,align:"center",color:C.amber,alpha:pz});
+        wrapFit("density "+(S?S.rq2.corr_density.toFixed(3):"…")+" vs popularity "+(S?S.rq2.corr_pop.toFixed(3):"…")+" against error — the map adds signal the long-tail effect can't explain",
+          b.p.x+pad,cy+px(50),inner,{size:10,italic:true,color:C["ink-2"],alpha:pz,lh:14,maxLines:3});
+      }
+    }})});
+
+lvl({sp:11,tag:"RQ3 · PERSIST",title:"Test whether blind spots persist",kicker:"Plate tectonics — do the fault lines move?",
+  io:[["in","the same frozen questions, twice"],["proc","run an older ensemble alongside"],["out","the persistent core"]],
+  tips:{i:"The exact same {{questions}} questions from Level 1 — only possible because the set was frozen with a fixed seed. The non-adversarial filter applies to TruthfulQA only, where the adversarial half was written against GPT-3; the other three datasets run in full.",p:"An older model generation is run through the identical pipeline, producing a second silent-consensus map over an identical question index. Note the arms differ in SIZE as well as generation — see the note.",o:"Three numbers, not one: blind spots that healed ({{healed}}), blind spots that emerged ({{emerged}}), and the persistent core that was silent consensus then and still is now ({{persisted}})."},
+  why:"A blind spot that survives a whole model generation is <strong>more likely a structural limit (possibly inherited from shared training data, not tested here) than a bug awaiting the next release</strong>. That is the durability answer &mdash; the reason this stays relevant past any single model &mdash; and it is only testable because Level 1 froze the sample.",whySkip:"every result is a snapshot of today's models, with no way to tell a permanent blind spot from one the next release already fixed.",
+  narr:"Everything so far is a snapshot of today's models. Persistence asks whether the cracks move: as models upgrade, <strong>do the same silent-consensus regions survive, or heal?</strong> A persistent core would suggest something the model generations share, such as their training data.",
+  note:"<b>The non-adversarial filter applies to TruthfulQA only</b> — its adversarial half was written against GPT-3, which would confound a cross-generation test. The other three datasets run in full, so both arms cover the same {{questions}} questions.<br><br><b>What the comparison found.</b> The newer ensemble is more accurate, and its blind spots do not shrink. Overall error falls {{wrongOld}}% —> {{wrongNew}}%. The grader counts {{gradOld}} —> {{gradNew}} blind spots, but the <i>genuine</i> ones, adjudicated case by case, go {{genOld}} —> {{genNew}}: <b>not a significant change</b> (exact McNemar p = {{genP}}; outside judge {{outOld}} —> {{outNew}}, p = {{outP}}). What does rise is the share of the remaining errors that are shared: {{shareOld}}% —> {{shareNew}}%, {{shareRatio}}× (95% CI {{shareCI}}). One generation pair, with size and generation changing together.<br><br><b>The confound, stated plainly.</b> The two arms differ in <i>three</i> ways, not one: generation (2024 vs 2025), <b>scale</b> (7–9B dense vs 17–27B active, two of them MoE), and serving (local 4-bit vs hosted). Only precision is partially controlled, by a q8 replication on a sample of the corpus. So this level measures what happens when a deployed ensemble is <b>upgraded</b> — which in practice always means newer AND larger — and it cannot separate generation from scale. Isolating them needs a 2024-generation arm at 24–27B on the same provider; that arm is specified and costed but has not been run, and no fully size-matched four-maker set exists (Meta's 2025-generation Llama models (Llama 4) are all 17B active parameters or larger).",
+  draw:findingLevel({inSub:"identical question set",procSub:"two model generations",outSub:"persistent vs healed",
+    outColor:[251,191,36],mapVariant:"track",tools:["DeepInfra (2025) · Ollama (2024)","same seed, same questions"],
+    mid:function(b,t,now,a){
+      var pad=px(18),py=bodyTop(b.p),inner=b.p.w-pad*2;
+      /* The REAL two arms. This diagram used to name a "gen 1" ensemble
+         (Llama 2 / Qwen 1.5 / Mistral 0.1) that was dropped before any result
+         was produced — three makers, unfixable — and it labelled the 2024
+         local arm as "current". Third line is the scale, because the arms are
+         NOT size-matched and the page must not imply that they are. */
+      [["2025 · hosted","Qwen3-235B · Gemma-3-27B · Llama-4-Maverick · Mistral-Small-3.2","17–27B active · 2 MoE · DeepInfra",C.amber],
+       ["2024 · local","Llama-3.1-8B · Qwen2.5-7B · Mistral-7B-v0.3 · Gemma-2-9B","7–9B dense · 4-bit · RTX 4060 8 GB",C["ink-3"]]].forEach(function(g,i){
+        var aa=easeOut(stag(i,t,.12,.45));if(aa<=0)return;
+        var y=py+i*px(76);
+        rect(b.p.x+pad,y,inner,px(64),{fill:g[3],fillA:.1*aa,stroke:g[3],strokeA:.45*aa,r:10});
+        fit(g[0],b.p.x+pad+px(12),y+px(20),inner-px(24),{size:12,weight:700,color:g[3],alpha:aa});
+        fit(g[1],b.p.x+pad+px(12),y+px(36),inner-px(24),{size:9,font:FM,color:C["ink-2"],alpha:aa});
+        fit(g[2],b.p.x+pad+px(52),y+px(52),inner-px(24),{size:9,font:FM,color:C.red,alpha:.85*aa});
+      });
+      var o=easeOut(stag(3,t,.1,.55));
+      if(o>0){
+        var cy=py+px(178);
+        arw(b.p.x+pad+inner*.28,cy-px(24),b.p.x+pad+inner*.44,cy-px(2),{alpha:o,color:C.amber,head:4});
+        arw(b.p.x+pad+inner*.72,cy-px(24),b.p.x+pad+inner*.56,cy-px(2),{alpha:o,color:C["ink-3"],head:4});
+        glow(b.p.x+b.p.w/2,cy+px(24),px(56),C.amber,.2*o);
+        fit("overlap = persistent core · "+F("persisted")+" of "+F("silent"),b.p.x+pad,cy+px(28),inner,
+          {size:13,font:FM,weight:700,color:C.amber,alpha:o});
+        /* The arms differ in scale as well as generation. Saying so here is the
+           whole point: the page must not appear to promise a control the study
+           does not have. */
+        wrapFit("the arms differ in SIZE as well as generation — this measures upgrading, not ageing",
+          b.p.x+pad,cy+px(50),inner,{size:10,italic:true,color:C.red,alpha:.9*o,lh:14,maxLines:2});
+      }
+    }})});
+
+lvl({sp:12,tag:"RQ4 · RETRIEVAL",title:"Test the retrieval dissociation",kicker:"Retrieval fixes some errors — not shared misconceptions.",
+  io:[["in","errors, split by cause"],["proc","re-answer closed-book vs with retrieval"],["out","what retrieval fixes — and what it can't"]],
+  tips:{i:"Errors in two rule-based groups: obscurity (the rarest PopQA entities, n=500) and shared misconception (TruthfulQA errors, n=57). Staleness was in the original design and was never measured.",p:"Each group is answered twice — once closed-book, once with retrieved documents. The prediction is a DISSOCIATION: retrieval fixes obscurity but not misconceptions.",o:"The error-rate drop per group. Obscurity is the positive control — retrieval MUST work there, or a null result on misconceptions means nothing."},
+  why:"The most practically useful claim: it tells anyone building a RAG system <strong>which errors their retrieval layer will not save them from</strong>. The measured result: documents fix {{rq4Obs}} points of obscurity errors but only {{rq4Mis}} of misconceptions, and that {{rq4Mis}} is not statistically significant (p = {{rq4P}}); the gap between them, {{rq4Diss}} points, is the claim. One untested explanation is that retrieval draws from the same web that taught the misconception. An experiment that predicts a dissociation &mdash; helps here, not there &mdash; is far stronger than ‘retrieval improves accuracy’, and if it's wrong that is still a publishable result.",whySkip:"you would be left asserting that retrieval can't fix misconceptions in prose — the exact move the feedback said to stop making. Measure it instead.",
+  narr:"Split the errors by cause and give each retrieval. <strong>Obscurity</strong> (never in the weights) should be fixed — a document supplies the fact. <strong>Shared misconceptions</strong> should not — retrieval may draw on the same corpus that produced the myth. The predicted dissociation is the finding.",
+  note:"The corpus is itself a variable: a curated source (Wikipedia debunks common myths) versus open web. The sharpened claim: retrieval corrects an error only when the corpus holds an explicit correction — and for misconceptions the myth may be more retrievable than its correction. That explanation is untested.<br><br><b>RQ5 — agentic web search, reported here.</b> Letting the models search the web for themselves does not rescue the blind spots either: {{rq5Pc}}% of them ({{rq5K}} of {{rq5N}}) stay wrong (95% CI {{rq5CI}}%). It has no level of its own because it reuses this set-up, with a search tool in place of fixed documents.",
+  draw:findingLevel({inSub:"errors by cause",procSub:"closed-book vs retrieval",outSub:"fixed vs unreachable",
+    outColor:[45,212,191],mapVariant:"audit",tools:["retrieval (Wikipedia pages; RQ5 adds open-web search)","same grading, both arms"],
+    mid:function(b,t,now,a){
+      var R=[["obscurity","rarest PopQA entities · n=500",F("rq4Obs")+" points",true,C.teal],
+             ["misconception","TruthfulQA errors · n=57",F("rq4Mis")+" · not sig.",false,C.violet]];
+      var pad=px(18),py=bodyTop(b.p),inner=b.p.w-pad*2;
+      R.forEach(function(r,i){
+        var aa=easeOut(stag(i,t,.11,.45));if(aa<=0)return;
+        var y=py+i*px(60),hot=!r[3];
+        if(hot)glow(b.p.x+pad+inner*.5,y+px(24),px(58),C.violet,.18*(.5+.5*Math.sin(now/640)));
+        rect(b.p.x+pad,y,inner,px(48),{fill:r[4],fillA:(hot?.16:.09)*aa,stroke:r[4],strokeA:(hot?.7:.4)*aa,r:10});
+        fit(r[0],b.p.x+pad+px(12),y+px(20),inner*.62,{size:12,weight:700,color:r[4],alpha:aa});
+        fit(r[1],b.p.x+pad+px(12),y+px(37),inner*.62,{size:9.5,font:FM,color:C["ink-3"],alpha:aa});
+        labFit(r[2],b.p.x+pad+inner*.64,y+px(28),inner*.34,
+          {color:r[3]?C.green:C.violet,alpha:aa,weight:700});
+      });
+      var nt=easeOut(stag(4,t,.1,.5));
+      if(nt>0)wrapFit("measured: misconception "+F("rq4Mis")+" points, not significant (p = "+F("rq4P")+"); the gap of "+F("rq4Diss")+" is the finding. Why retrieval fails is untested.",
+        b.p.x+pad,py+2*px(60)+px(14),inner,{size:10.5,italic:true,color:C.violet,alpha:nt,lh:14,maxLines:3});
+    }})});
+
+/* Risk register. sp:-1 — no spine marker: this is a cross-cutting page like the
+   overview, not a pipeline stage, and numbering it would imply the data flows
+   through it. Sits second-to-last, immediately before the tool. */
+lvl({sp:-1,tag:"RISK REGISTER",title:"What could go wrong",
+  kicker:"Nine risks — three answered by the full run, three open for your input.",
+  io:[["in","every risk worth naming"],["proc","answered by the full run, or left open on purpose"],["out","3 answered · 3 decisions · 3 carried"]],
+  why:"A proposal that only lists risks asks the reader to trust that they are survivable. <strong>Three of these now have answers from the full run</strong> — {{questions}} questions, {{gens}} graded answers — so the biggest unknowns are numbers rather than hopes. One did not come back the way the proposal hoped, and it is stated here as it landed. The three in the middle column are genuine forks where a supervisor's judgement changes the design.",
+  whySkip:"the first hard question in the defence is one I have already answered but never wrote down, and the open decisions get made alone and late.",
+  narr:"The upstream risk was always <strong>that the four models fail together</strong> — if they do, every finding downstream loses its foundation. It was measured first, not last — and the answer is <strong>yes, they do</strong>, on {{silent}} questions where all four agreed and all four were wrong. The signal still lands at <strong>AUC {{auc}}</strong>, in the same range as the published work it builds on (measured on different questions), because those {{silent}} are {{silentPc}}% of the agreement region rather than most of it. The risk was not retired; it became the thesis.",
+  note:"The middle column is what I would most like your input on. Each is a fork where the data is in but the call is a design judgement, not a calculation.<br><br>Measured on the <b>full run</b> — {{questions}} questions, {{gens}} graded answers, zero failed calls. {{defects}} defects were found and fixed along the way; every one, its cause and its fix is in <b>ISSUES.md</b>.",
+  draw:function(t,now){
+    var COLS=[
+      ["answered by the full run",C.green,[
+        ["Do the four models fail together?",
+         "Yes — on "+F("silent")+" questions. That answer became the project.",
+         "This is the risk that sits upstream of everything: if the four models are wrong on the same questions, disagreement carries no information and the five research questions have nothing to stand on. The pilot said the correlation was comfortably healthy and retired the risk. At full scale it is real and measurable — "+F("silent")+" questions where every model agreed and every model was wrong, "+F("silentPc")+"% of the agreement region — and across the one generation pair measured, the share of errors that are shared rises "+F("shareOld")+"% to "+F("shareNew")+"%, while the number of genuine blind spots does not significantly change ("+F("genOld")+" → "+F("genNew")+", p = "+F("genP")+"). The signal survives because the blind region is a minority of agreement, not because it is absent. A risk that turns out to be real is not a design failure; publishing the pilot answer after the full run contradicted it would have been."],
+        ["Does disagreement beat single-model detection?",
+         "Yes, at scale. Cross-model "+F("baseCross")+" vs best single "+F("single")+" on "+F("basen")+" shared questions.",
+         "This reversed between scales, and the reversal is the record. On 300 questions the best single model's Semantic Entropy BEAT the ensemble and the honest answer was no. On "+F("basen")+" questions at a matched budget — four generations either way — cross-model disagreement scores "+F("baseCross")+" on those questions against the best single model's "+F("single")+" ("+F("singleName")+"). Quote the full-scale pair; never the pilot's. Detection was never the contribution regardless — the map and the five research questions are things a single-model score cannot produce."],
+        ["Is the evaluation circular?",
+         "Found and fixed. The first target was implied by its own input; a flattering 0.911 was discarded.",
+         "The original target asked 'was any of the four models wrong?' — but with one gold answer, four different answers means someone is wrong by arithmetic, not by evidence. It scored 0.911 and meant nothing. The target is now majority_wrong: is the answer the ensemble would actually give wrong? Disagreement does not determine that. Both numbers are printed side by side on every run so the inflation stays visible."]
+      ]],
+      ["open — your input wanted",C.amber,[
+        ["Should confidence weight the score, or stand beside it?",
+         "Beside it. Weighted "+F("aucw")+" vs plain "+F("auc")+" — a wash at scale.",
+         "The proposal presents confidence-weighted disagreement as an improvement. Measured at full scale it moves the AUC by +0.004 ("+F("auc")+" → "+F("aucw")+"), a wash; it hurt only at the 7–9B pilot scale. The nuance that matters: confidence is not useless — on its own it separates right from wrong answers — its mean is higher on right answers than on wrong ones across the corpus. Both signals carry information; multiplying them into one number is what loses it. The alternative is to treat disagreement and confidence as two features rather than one blended score."],
+        ["How strict should silent consensus be?",
+         F("silent")+" cases in "+F("questions")+". 'All four agree' is strict; 'three of four' yields more.",
+         "All-agree-all-wrong cases are the paradigm's blind spot and the founding premise of RQ1. They are also rare — "+F("silentRate")+"% of the corpus. Relaxing the definition to 'three of four agree and all are wrong' would yield substantially more cases while still capturing the phenomenon; it changes what the finding claims, which makes it a judgement call rather than a tuning decision. The related sensitivity — how much the rate depends on the ensemble being four models rather than three or two — has been measured over every subset of the 2025 models: the mean 3-model rate is "+F("k3rate")+"% and the mean 2-model rate "+F("k2rate")+"%, so the number is size-dependent and must be reported with the curve. Note also that "+F("outsideTqa")+"% of blind spots sit OUTSIDE TruthfulQA, against the proposal's prediction, so sourcing from all four datasets is necessary rather than optional."],
+        ["Is TruthfulQA's flat signal a result or a problem?",
+         "A result, with a wide interval. AUC "+F("truthfulqa")+"; hand-labelling did not detectably change it.",
+         "TruthfulQA is built from misconceptions models share. When all four absorb the same myth they can agree, and agreement is exactly what this method reads as safe. Its signal is the weakest of the four datasets — AUC "+F("tqaAucCI")+", against TriviaQA "+F("triviaqa")+" and PopQA "+F("popqa")+" — weaker, not blind, and the interval is wide because only "+F("nTruthfulqa")+" questions survive filtering. It is also not where the blind spots are: only "+F("tqaSilent")+" of the "+F("silent")+" sit in TruthfulQA. Hand-labelling "+F("handlabels")+" TruthfulQA verdicts moves its AUC by +0.042 with an interval that crosses zero — not a detectable change (RESULTS claim 10). RQ4 tests a related prediction: retrieval should help misconceptions less than obscurity."]
+      ]],
+      ["carried as limitations",C.blue,[
+        ["Novelty of the combined thesis",
+         "Stated narrowly (thesis §2.10): the signal is borrowed; measuring its blind region is not.",
+         "Not claimed: the disagreement signal itself (Hamidieh et al., ICLR 2026, already demonstrate it), grouping answers by meaning, or disagreement as an object of visual analysis. Claimed, narrowly (thesis §2.10): the independence assumption is measured rather than assumed for a hallucination detector on factual QA with no answer key — within a dataset the four 17–27B-active models are wrong together "+F("strRatio")+"× as often as independence predicts; the region where the signal is blind is located on a map, tracked across a model generation, and shown to resist agentic search (RQ5); retrieval's failure on misconceptions is measured on ensemble errors generally (RQ4); and its size tracks how correlated the ensemble's errors are, not how capable its models are. The closest prior work (Liu 2026; Kohli 2026) measures correlated errors on reasoning or judging tasks, not factual QA. Part of the novelty rests on not having found competing work, which Chapter 2 flags as the weakest form of claim."],
+        ["4-bit quantization noise",
+         "Some measured disagreement may be an artifact. Identical quantization across all four keeps it uniform.",
+         "The 2024 comparison arm runs 4-bit on a single laptop GPU, and quantization adds noise that is indistinguishable from a genuine knowledge difference. Holding the quantization level identical across the ensemble at least makes the noise uniform rather than model-specific. Reported as a limitation regardless — a reviewer who knows quantization will think of it."],
+        ["Grading artifact and a second annotator",
+         "Measured: "+F("artifactPc")+"% artifact by blind adjudication; second annotator κ "+F("irrKappa")+".",
+         "The "+F("handlabels")+" blinded verdicts in Level 9 were one person's judgement and could only bound the grading artifact. Both halves of that hole have since been closed by measurement. A blind adjudication pass over the "+F("artifactTotal")+" blind spots ("+F("artifactJudged")+" decided) puts the share that are grading artifacts rather than genuine shared errors at "+F("artifactPc")+"% (95% CI "+F("artifactCI")+"%), so every blind-spot count travels with that correction. And a second human annotator labelled "+F("irrN")+" cases: agreement with the first annotator is Cohen's κ = "+F("irrKappa")+". Level 9 compares the hand labels with the MACHINE grader (how often it was too generous or too harsh); this κ is between two humans. Carried as a limitation because the artifact rate is large enough to matter and it differs by dataset."]
+      ]]
+    ];
+    var gx=W*.045,gw=W*.91,gapX=W*.025,cw=(gw-gapX*2)/3;
+    // sized so the columns AND the two footer lines clear the canvas bottom at
+    // the largest SC: total is ~px(400), and bot-gy is H*.81
+    var gy=H*.145,pad=px(14),itemH=px(86),gapI=px(10),headH=px(44);
+    var colH=headH+3*itemH+2*gapI+px(12);
+    COLS.forEach(function(col,ci){
+      var a=easeOut(stag(ci,t,.12,.5));if(a<=0)return;
+      var x=gx+ci*(cw+gapX);
+      rect(x,gy,cw,colH,{fill:col[1],fillA:.07*a,stroke:col[1],strokeA:.45*a,r:14});
+      rect(x,gy,cw,px(3),{fill:col[1],fillA:a,r:2});
+      labFit(col[0],x+pad,gy+px(30),cw-pad*2,{color:col[1],alpha:a,weight:700,size:9.5});
+      col[2].forEach(function(it,i){
+        var aa=easeOut(stag(ci*1.1+i,t,.08,.42));if(aa<=0)return;
+        var y=gy+headH+i*(itemH+gapI);
+        rect(x+px(8),y,cw-px(16),itemH,
+          {fill:col[1],fillA:.06*aa,stroke:col[1],strokeA:.22*aa,r:10});
+        wrapFit(it[0],x+px(18),y+px(21),cw-px(52),
+          {size:11.5,weight:700,color:C.ink,alpha:aa,lh:14,maxLines:2});
+        wrapFit(it[1],x+px(18),y+px(54),cw-px(36),
+          {size:9.8,font:FM,color:C["ink-2"],alpha:aa,lh:12.5,maxLines:3});
+        qmark(x+cw-px(22),y+px(17),it[0],it[2]);
+      });
+    });
+    var f=easeOut(stag(5,t,.1,.5));
+    if(f>0){
+      // only this one line sits near the canvas bottom; the provenance detail
+      // lives in the note panel, which is DOM and cannot clip at any viewport
+      fit("the three on the left were answered by the full run, after the proposal was written",
+        W*.5,gy+colH+px(34),W*.8,
+        {size:13,italic:true,align:"center",color:C.violet,alpha:f});
+    }
+  }});
+
+lvl({sp:13,tag:"LEVEL 14",title:"Everything lands in the tool",kicker:"Five linked views.",
+  io:[["in","one exported data.json — records + labels"],["proc","a single static page, canvas 2D"],["out","five coordinated views"]],
+  tips:{i:"One JSON file exported from the parquet store: every record, every score, every human verdict.",p:"No server. A single HTML page holds the state and draws the map on a 2D canvas; selection and brushing are handled in plain JavaScript.",o:"Five views — The map, Read the cases, Did upgrading help?, How good is the signal?, Which ensemble? Brushing a region of the map filters the case queue. Each view supports one analysis task."},
+  why:"The tool is not a write-up of the findings &mdash; it <strong>produces</strong> them. Each view supports one task, and the labelling panel lets a reviewer mark cases and export their verdicts. That is also what makes this a visual-analytics thesis rather than an ML report",whySkip:"the labelling has nowhere to happen, and the findings become static figures a reader has to take on trust.",
+  narr:"The tool is not a wrapper on a number. <strong>Each view supports one of the analysis tasks</strong>, and a labelling panel lets reviewers mark cases and export their verdicts. (The 430 blinded hand labels in the thesis were made with a separate command-line script.)",
+  note:"<b>One static page, data baked in, no server.</b> An earlier design had three tiers — Neon Postgres → FastAPI on Hugging Face Spaces → React on Vercel — and it was dropped on purpose. The evaluation was designed around participants opening a link, and a server was one more thing that could be down on the day. Everything the tool needs ships in the page and one JSON file; state, brushing and linked selection are plain JavaScript; the map is a 2D canvas and the ensemble charts are D3.",
+  draw:function(t,now){
+    /* the tool's five real tabs, labelled as faultlines-tool/index.html labels them */
+    var V=[["1 · The map","where do wrong answers and blind spots sit?",C.amber],
+           ["2 · Read the cases","the blind spots one by one — real error or answer-key artifact?",C.violet],
+           ["3 · Did upgrading help?","which blind spots survive a model generation?",C.green],
+           ["4 · How good is the signal?","how well does disagreement rank errors, per dataset?",C.red],
+           ["5 · Which ensemble?","does a less correlated ensemble shrink the blind region?",C.blue]];
+    var gx=W*.06,gw=W*.88,cw=(gw-W*.05)/3,ch=px(112),gapX=W*.025,gapY=px(34),gy=H*.17;
+    V.forEach(function(v,i){
+      var a=easeOut(stag(i,t,.09,.45));if(a<=0)return;
+      var row=(i/3)|0,x=gx+(i%3)*(cw+gapX)+(row?(cw+gapX)/2:0),y=gy+row*(ch+gapY),pad=px(14);
+      rect(x,y,cw,ch,{fill:v[2],fillA:.09*a,stroke:v[2],strokeA:.45*a,r:13});
+      rect(x,y,cw,px(3),{fill:v[2],fillA:a,r:2});
+      fit(v[0],x+pad,y+px(32),cw-pad*2,{size:13.5,font:FD,weight:700,color:v[2],alpha:a});
+      wrapFit(v[1],x+pad,y+px(56),cw-pad*2,{size:10.5,italic:true,color:C["ink-2"],alpha:a,lh:15,maxLines:3});
+    });
+    var f=easeOut(stag(7,t,.1,.5));
+    if(f>0){
+      fit("each view is the finding's test, not an illustration of it",W*.5,gy+2*ch+gapY+px(50),W*.7,
+        {size:13,italic:true,align:"center",color:C.ink,alpha:f});
+      fit("one static page  ·  JS + canvas 2D + D3  ·  one data.json  ·  Vercel",W*.5,gy+2*ch+gapY+px(76),W*.7,
+        {size:10.5,font:FM,align:"center",color:C.lime,alpha:f*.9});
+    }
+  }});
+
+/* ---------------- every level, as one linear document ----------------
+   The panel above shows ONE level at a time and JavaScript decides which. That
+   made this page almost empty to anything that does not run JS -- a crawler, a
+   link preview, an agent fetching the URL got the header, the standfirst and a
+   footer with two unsubstituted {{tokens}} in it. prerender.mjs calls this and
+   bakes the result into <details id="alllevels"> below the transport, so the
+   whole explanation is in the HTML that ships.
+
+   It is a real, visible section rather than something hidden for crawlers:
+   collapsed behind <details>, open to anyone who wants to read all fourteen in
+   one go or print them. Content comes from L and sub(), the same array and the
+   same substitution the interactive panel uses, so there is no second copy of
+   any sentence or any figure. */
+function esc(t){return String(t==null?"":t)
+  .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+function allLevels(){
+  /* narr/why/whySkip/note carry intentional markup (<strong>, &mdash;) and are
+     assigned with innerHTML by render(), so they pass through sub() unescaped.
+     tag/title/kicker/io are set with textContent by render() and are escaped
+     here to match -- a level titled "A < B" must not become a tag. */
+  return L.map(function(s,i){
+    var io = (s.io||[]).map(function(kv,k){
+      return '<div class="'+(["i","p","o"][k]||"i")+'"><dt>'+esc(kv[0])+
+             '</dt><dd>'+esc(sub(kv[1]))+'</dd></div>';}).join("");
+    return '<section class="lvl-text" id="T'+i+'">'+
+      '<span class="lvl">'+esc(s.tag)+'</span>'+
+      '<h3>'+esc(s.title)+'</h3>'+
+      (s.kicker?'<p class="kicker">'+esc(s.kicker)+'</p>':'')+
+      (io?'<dl class="io">'+io+'</dl>':'')+
+      (s.narr?'<p class="narration">'+sub(s.narr)+'</p>':'')+
+      (s.why?'<p class="lvl-why"><span class="why-label">Why this step exists</span>'+
+             sub(s.why)+'</p>':'')+
+      (s.whySkip?'<p class="lvl-skip"><span class="why-label">Skip it and…</span>'+
+             sub(s.whySkip)+'</p>':'')+
+      (s.note?'<p class="lvl-note">'+sub(s.note)+'</p>':'')+
+      '</section>';
+  }).join("");
+}
+
+/* ---------------- canvas ---------------- */
+var cv=document.getElementById("cv");ctx=cv.getContext("2d");
+function resize(){var r=cv.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,2);
+  W=r.width;H=r.height;if(!W||!H)return;
+  cv.width=Math.round(W*d);cv.height=Math.round(H*d);
+  ctx.setTransform(d,0,0,d,0,0);SC=Math.max(.68,Math.min(1.35,W/960));}
+new ResizeObserver(resize).observe(cv);resize();
+cv.addEventListener("mousemove",function(e){
+  var r=cv.getBoundingClientRect();MX=e.clientX-r.left;MY=e.clientY-r.top;});
+cv.addEventListener("mouseleave",function(){MX=MY=-1e4;});
+cv.addEventListener("touchstart",function(e){
+  var r=cv.getBoundingClientRect(),tp=e.touches[0];
+  if(tp){MX=tp.clientX-r.left;MY=tp.clientY-r.top;}},{passive:true});
+
+/* ---------------- playback: manual only ---------------- */
+var cur=0,sceneStart=-1,lastFrameAt=0,TRANS=900;
+function renderFrame(now){
+  lastFrameAt=now;
+  if(sceneStart<0)sceneStart=now;
+  var t=reduced?1:clamp((now-sceneStart)/TRANS,0,1);
+  if(W&&H){
+    ctx.clearRect(0,0,W,H);
+    HOT=[];CURTIPS=L[cur].tips||{};
+    // tooltips carry figures too -- same tokens, same source (ISSUES #47)
+    CURTIPS=Object.keys(CURTIPS).reduce(function(a,k){a[k]=sub(CURTIPS[k]);return a},{});
+    try{ drawSpine(L[cur].sp,t); L[cur].draw(t,now); drawTip(); }
+    catch(e){ if(!L[cur]._lg){L[cur]._lg=1;console.error("level "+cur,e);} }
+  }
+  bar.style.width=((cur/(L.length-1))*100).toFixed(1)+"%";
+}
+function frame(now){renderFrame(now);requestAnimationFrame(frame);}
+/* rAF is suspended in occluded tabs; this guarantees a level still completes */
+setInterval(function(){var n=performance.now();if(n-lastFrameAt>400)renderFrame(n);},300);
+
+/* ---------------- ui ---------------- */
+var elLvl=document.getElementById("lvl"),elTitle=document.getElementById("title"),
+    elKick=document.getElementById("kicker"),elIo=document.getElementById("io"),
+    elNarr=document.getElementById("narr"),elNote=document.getElementById("note"),
+    elCount=document.getElementById("counter"),bar=document.getElementById("barfill");
+
+function render(){
+  var s=L[cur];
+  elLvl.textContent=s.tag;
+  elTitle.textContent=s.title;
+  elKick.textContent=s.kicker||"";elKick.style.display=s.kicker?"":"none";
+  elIo.innerHTML="";
+  if(s.io)s.io.forEach(function(kv,i){
+    var d=document.createElement("div");d.className=["i","p","o"][i]||"i";
+    var dt=document.createElement("dt");dt.textContent=kv[0];
+    var dd=document.createElement("dd");dd.textContent=sub(kv[1]);
+    d.appendChild(dt);d.appendChild(dd);elIo.appendChild(d);
+  });
+  elNarr.innerHTML=sub(s.narr);
+  document.getElementById("whyText").innerHTML=sub(s.why)||"";
+  document.getElementById("skipText").innerHTML=sub(s.whySkip)||"";
+  if(s.note){
+    var note=sub(s.note);
+    // split on the paragraph breaks so each part is a block the columns keep whole
+    elNote.innerHTML=note.split("<br><br>").map(function(x){
+      return '<span class="np">'+x+'</span>';}).join("");
+    elNote.hidden=false;
+    elNote.className="note"+(/pending|novelty/i.test(note)?" warn":"");}
+  else elNote.hidden=true;
+  elCount.textContent=String(cur+1).padStart(2,"0")+" / "+L.length;
+}
+function hashIndex(){
+  var m=/^#L(\d+)$/.exec(location.hash||"");
+  if(!m)return 0;
+  var n=+m[1];return (n>=1&&n<L.length)?n:0;
+}
+function go(n){
+  if(n===cur)return;
+  cur=n;sceneStart=-1;render();
+  try{history.replaceState(null,"",cur?"#L"+cur:location.pathname);}catch(e){}
+}
+addEventListener("hashchange",function(){go(hashIndex());});
+document.getElementById("next").addEventListener("click",function(){go((cur+1)%L.length);});
+document.getElementById("prev").addEventListener("click",function(){go((cur-1+L.length)%L.length);});
+addEventListener("keydown",function(e){
+  if(e.key==="ArrowRight"||e.key===" "){e.preventDefault();go((cur+1)%L.length);}
+  else if(e.key==="ArrowLeft"){go((cur-1+L.length)%L.length);}
+});
+cur=hashIndex();render();requestAnimationFrame(frame);
+
+/* The page renders immediately with "…" in place of every figure, then fills
+   them in. Deliberately non-blocking: the pipeline explanation is readable
+   without the numbers, and a fetch failure should cost the figures, not the
+   page. A visible "…" says the data did not arrive; a stale literal would not. */
+fetch("summary.json").then(function(r){
+  if(!r.ok)throw new Error("HTTP "+r.status);return r.json();
+}).then(function(d){
+  S=d;render();
+  /* The footer's two figures are NOT substituted here. sub() was only ever
+     applied to the level prose, so this page published a literal
+     "{{questions}} questions, {{gens}} graded answers" to every reader for as
+     long as those tokens have been there. They are baked instead -- see the
+     figQ/figG entries in prerender.mjs -- so they are right for a reader with
+     no JavaScript too, which a runtime fix here could never manage. */
+}).catch(function(){
+  S=null;
+  var w=document.getElementById("figwarn");
+  if(w){w.innerHTML='⚠ <b>summary.json did not load</b>, so the figures below'
+        +' read "…". Serve this folder over HTTP rather than opening the file'
+        +' directly.';w.hidden=false;}
+});
+})();
+</script>

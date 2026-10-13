@@ -1,0 +1,10 @@
+# Pinned loosely on purpose -- this needs to still install in December.
+pandas>=2.2
+pyarrow>=15.0          # parquet
+pyyaml>=6.0
+requests>=2.31
+datasets>=2.19         # HF dataset loading (Level 1)
+sentence-transformers>=3.0
+umap-learn>=0.5.6
+scikit-learn>=1.4
+numpy>=1.26,<2.3       # umap-learn/numba are fussy above this

@@ -1,0 +1,2709 @@
+<!doctype html>
+<meta charset="utf-8">
+<!-- Repo is private until the defence; the deployed page is public by
+     default. noindex keeps unpublished results out of search results
+     without blocking anyone you send the link to. Remove after the defence. -->
+<meta name="robots" content="noindex,nofollow">
+
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FaultLines — where model ensembles fail together</title>
+<style>
+  :root{
+    --bg:#0b102a; --panel:#151c3e; --panel2:#1b2450; --ink:#eaeef9; --ink2:#b6bed8;
+    --ink3:#828cae; --rule:#2a3566; --teal:#2dd4bf; --violet:#a78bfa; --amber:#fbbf24;
+    --pink:#f472b6; --blue:#60a5fa; --green:#34d399; --red:#f87171;
+    --mono:"JetBrains Mono",Consolas,ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden}
+  body{background:var(--bg);color:var(--ink);
+    font:16px/1.55 "Inter","Segoe UI",system-ui,sans-serif}
+  [hidden]{display:none!important}
+
+  /* Every slide is exactly one viewport. No page scrolling anywhere -- this
+     replaces a slide deck, and hunting for content by scrolling was the single
+     complaint about the previous version. */
+  #deck{position:relative;height:100%;width:100%}
+  .slide{
+    position:absolute;inset:0;display:none;
+    padding:clamp(28px,5vh,64px) clamp(28px,6vw,110px);
+    flex-direction:column;justify-content:center;
+    background:radial-gradient(1100px 640px at 12% -8%,#1a2350 0%,var(--bg) 58%);
+    animation:in .42s cubic-bezier(.22,.8,.28,1) both;
+  }
+  .slide.on{display:flex}
+  @keyframes in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.slide{animation:none}}
+
+  /* The kicker above each headline. Deliberately larger than the usual deck
+     eyebrow: it is the only thing on the slide that says what KIND of claim
+     follows, and at 11px people read the headline first and the frame never. */
+  .eyebrow{font-family:var(--mono);font-size:clamp(12.5px,1.45vw,18px);letter-spacing:.17em;
+    text-transform:uppercase;color:var(--teal);margin-bottom:16px}
+  h1{margin:0;font-size:clamp(34px,6.4vw,86px);line-height:1.02;font-weight:800;letter-spacing:-.02em}
+  h2{margin:0 0 18px;font-size:clamp(24px,3.5vw,48px);line-height:1.1;font-weight:800;letter-spacing:-.015em}
+  h3{margin:0 0 10px;font-size:clamp(17px,1.7vw,23px);font-weight:700;color:var(--ink)}
+  p{margin:0 0 14px;font-size:clamp(14px,1.42vw,20px);color:var(--ink2);max-width:74ch}
+  p.big{font-size:clamp(17px,2vw,28px);color:var(--ink);max-width:64ch;line-height:1.4}
+  /* A paragraph sitting DIRECTLY on a slide has nothing beside it, so a 74ch
+     measure left ~350px of dead space down the right of every text slide. Inside
+     .cols / .card / .fstep the column already sets the measure, and the child
+     selector leaves those alone. */
+  .slide>p{max-width:none}
+  .lede{color:var(--ink3)}
+  b,strong{color:var(--ink)}
+  .grad{background:linear-gradient(90deg,var(--teal),var(--violet),var(--pink));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .mono{font-family:var(--mono)}
+  .muted{color:var(--ink3)}
+  .red{color:var(--red)} .green{color:var(--green)} .amber{color:var(--amber)}
+  .teal{color:var(--teal)} .violet{color:var(--violet)}
+
+  /* stat strip */
+  .stats{display:flex;gap:clamp(10px,1.6vw,26px);flex-wrap:wrap;margin:8px 0 4px}
+  .st{background:var(--panel);border:1px solid var(--rule);border-radius:14px;
+    padding:clamp(10px,1.4vh,18px) clamp(14px,1.6vw,24px);min-width:120px}
+  .st b{display:block;font-family:var(--mono);font-size:clamp(20px,3vw,40px);line-height:1.1}
+  .st span{color:var(--ink3);font-size:clamp(10.5px,1vw,13.5px);text-transform:uppercase;letter-spacing:.08em}
+
+  /* bars */
+  .bars{display:grid;gap:9px;margin:6px 0 10px;max-width:none}
+  .bar{display:grid;grid-template-columns:clamp(90px,15vw,290px) 1fr auto;gap:12px;align-items:center;
+    font-size:clamp(12px,1.25vw,16px)}
+  .bar .lb{color:var(--ink2);text-align:right}
+  .bar .tr{background:#ffffff10;border-radius:99px;height:clamp(14px,1.9vh,24px);overflow:hidden}
+  .bar .fl{height:100%;width:0;border-radius:99px;transition:width .75s cubic-bezier(.2,.8,.25,1)}
+  .bar .vl{font-family:var(--mono);min-width:56px;text-align:right;color:var(--ink)}
+  .bar.hi .lb{color:var(--ink);font-weight:700}
+
+  /* the funnel — bars centred on one axis, with the wall between each pair
+     drawn as a real trapezoid.
+
+     This replaced left-aligned bars on 2026-08-07. The numbers were never
+     wrong; the PICTURE was. Five bars anchored to a left edge read as a bar
+     chart — five independent quantities being compared. But these five are
+     nested: every question in a lower row is also in every row above it. A
+     shape that tapers around a shared centre says "inside", where equal-left
+     bars say "beside". The claim of this slide is containment, so the chart
+     has to draw containment. */
+  .fn{display:grid;grid-template-columns:clamp(90px,15vw,290px) 1fr auto;
+      align-items:center;column-gap:12px;margin:6px 0 10px;
+      font-size:clamp(12px,1.25vw,16px);
+      animation:fnIn .65s cubic-bezier(.2,.8,.25,1) both}
+  @keyframes fnIn{from{opacity:0;transform:scaleX(.5)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.fn{animation:none}}
+  .fn .lb{color:var(--ink2);text-align:right;line-height:1.25}
+  .fn .lb.on{color:var(--ink);font-weight:700}
+  .fn .vl{font-family:var(--mono);min-width:56px;text-align:right;color:var(--ink)}
+  .fn .seg{height:clamp(15px,2vh,25px);border-radius:5px;margin:0 auto;
+           box-shadow:0 1px 0 #ffffff14 inset}
+  /* the sloping wall. Its own grid cell so the three-per-row rhythm holds. */
+  .fn .nk{height:clamp(7px,1.2vh,13px)}
+
+  /* two-column */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:clamp(18px,3vw,48px);align-items:start}
+  @media (max-width:860px){.cols{grid-template-columns:1fr;gap:14px}}
+  .card{background:var(--panel);border:1px solid var(--rule);border-radius:16px;
+    padding:clamp(14px,1.8vw,24px)}
+  .card.bad{border-color:rgba(248,113,113,.4)}
+  .card.good{border-color:rgba(52,211,153,.4)}
+  ul{margin:0;padding-left:1.15em;font-size:clamp(13px,1.3vw,18px);color:var(--ink2)}
+  li{margin-bottom:7px}
+
+  /* the agreement diagram */
+  .quad{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;max-width:560px}
+  .mbox{background:var(--panel2);border:1px solid var(--rule);border-radius:12px;padding:11px 14px}
+  .mbox .mn{font-family:var(--mono);font-size:clamp(9.5px,.9vw,11px);color:var(--ink3)}
+  .mbox .ma{font-size:clamp(14px,1.5vw,19px);font-weight:700;margin-top:2px}
+
+  table{border-collapse:collapse;font-size:clamp(12px,1.25vw,17px);width:100%;max-width:1400px}
+  th,td{padding:7px 12px;border-bottom:1px solid var(--rule);text-align:right}
+  th{color:var(--ink3);font-size:clamp(11px,1.05vw,14px);text-transform:uppercase;letter-spacing:.07em}
+  td:first-child,th:first-child{text-align:left}
+  td.k{color:var(--ink2)}
+
+  /* chrome */
+  #bar{position:fixed;top:0;left:0;height:2px;background:linear-gradient(90deg,var(--teal),var(--violet));
+    width:0;transition:width .32s ease;z-index:20}
+  #hud{position:fixed;bottom:14px;right:18px;display:flex;gap:10px;align-items:center;z-index:20;
+    font-family:var(--mono);font-size:11.5px;color:var(--ink3)}
+  #hud button{background:var(--panel);border:1px solid var(--rule);color:var(--ink2);
+    border-radius:8px;padding:4px 10px;cursor:pointer;font:inherit}
+  #hud button:hover{border-color:var(--ink3)}
+  #dots{position:fixed;bottom:16px;left:18px;display:flex;gap:5px;z-index:20;max-width:60vw;flex-wrap:wrap}
+  #dots i{width:7px;height:7px;border-radius:50%;background:#ffffff26;cursor:pointer;display:block}
+  #dots i.on{background:var(--teal);transform:scale(1.3)}
+  .hint{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:20;
+    font-size:11.5px;color:var(--ink3);font-family:var(--mono)}
+  kbd{font-family:var(--mono);font-size:10.5px;border:1px solid var(--rule);border-bottom-width:2px;
+    border-radius:4px;padding:1px 5px;color:var(--ink3)}
+  a.cta{display:inline-block;margin-top:6px;background:var(--teal);color:#04121a;font-weight:800;
+    text-decoration:none;border-radius:10px;padding:11px 20px;font-size:clamp(13px,1.4vw,18px)}
+  a.cta.ghost{background:transparent;color:var(--ink2);border:1px solid var(--rule);margin-left:8px}
+
+  /* the procedure slide: numbered steps, one line each */
+  .flow{display:grid;gap:clamp(6px,1.05vh,12px);max-width:none}
+  .fstep{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:baseline;
+    background:var(--panel);border:1px solid var(--rule);border-radius:12px;
+    padding:clamp(8px,1.15vh,14px) clamp(12px,1.4vw,20px)}
+  .fstep i{font-family:var(--mono);font-style:normal;font-weight:800;color:var(--teal);
+    font-size:clamp(13px,1.3vw,17px)}
+  .fstep b{font-size:clamp(14px,1.35vw,19px)}
+  .fstep p{margin:2px 0 0;font-size:clamp(12.5px,1.2vw,16.5px);color:var(--ink2);max-width:none}
+  .dsn{font-size:clamp(15px,1.5vw,21px);font-weight:800;margin-bottom:4px}
+  .dsn span{font-family:var(--mono);font-weight:400;color:var(--ink3);
+    font-size:clamp(11.5px,1.1vw,14px);margin-left:8px}
+
+  /* ── the ? marker ───────────────────────────────────────────────────────────
+     A slide has to be short, and short is what makes it confusing. Rather than
+     crowd the slide with the definition of every term, each number that needs
+     one carries a ? -- hover, tap or tab to it. The explanation lives in TIPS
+     in the script, next to the number it explains, so the two cannot drift.
+     Fixed px, not em: sizing a circle in em while also setting font-size in em
+     resolves the width against the NEW size and produces a dot. */
+  .q{display:inline-flex;align-items:center;justify-content:center;
+    width:16px;height:16px;flex:none;margin-left:6px;vertical-align:middle;
+    border-radius:50%;border:1px solid var(--rule);background:var(--panel2);
+    color:var(--ink3);font-family:var(--mono);font-size:10.5px;font-weight:700;
+    line-height:1;cursor:help;user-select:none;transition:.15s}
+  .q:hover,.q:focus{border-color:var(--teal);color:var(--teal);
+    background:#2dd4bf1a;outline:none}
+  /* position:fixed so the popover is never clipped by a slide's overflow */
+  #tip{position:fixed;z-index:60;max-width:min(440px,88vw);
+    background:#0d1330;border:1px solid var(--rule);border-left:3px solid var(--teal);
+    border-radius:11px;padding:12px 15px;font-size:14px;line-height:1.55;
+    color:var(--ink2);box-shadow:0 18px 44px #00000080;pointer-events:none}
+  #tip b{color:var(--ink)}
+  #tip .mono{display:block;margin-top:5px;font-size:12px;color:var(--ink3)}
+</style>
+
+<style>
+  /* READABLE BY DEFAULT; a deck only once JavaScript says so.
+     prerender.mjs bakes all nineteen slides into the HTML, but the deck rules
+     above hide every slide until JS marks the current one -- so the shipped page
+     was blank to anything that does not run JS. These rules were a <noscript>
+     block first, which was the wrong instrument: <noscript> applies when
+     scripting is DISABLED, and a fetcher that simply never executes JS is not
+     the same thing. Extractors that apply CSS and keep only visible text read
+     display:none and dropped all nineteen slides anyway.
+     Inverted instead. The document is a scrolling document as it ships, and the
+     one-line script below claims it for the deck before the slides are parsed,
+     so an interactive reader never sees the long form flash past. */
+  html:not(.js),html:not(.js) body{overflow:auto;height:auto}
+  html:not(.js) .slide{display:block;position:static;animation:none;
+    padding-bottom:56px;border-bottom:1px solid var(--rule)}
+  html:not(.js) #bar,html:not(.js) #dots,
+  html:not(.js) #hud,html:not(.js) #hint,html:not(.js) #tip{display:none}
+</style>
+<script>document.documentElement.className="js"</script>
+<div id="bar"></div>
+<div id="deck"><!--baked:deck--><div class="slide">
+    <div class="eyebrow">M.S. Data Science &amp; AI · San Francisco State University · VI-Lab</div>
+    <h1><span class="grad">FaultLines</span></h1>
+    <p class="big" style="margin-top:18px">A visual-analytics tool for the place where
+      asking several language models <em>stops working</em>: when they all agree,
+      and all of them are wrong.</p>
+    <div class="stats" style="margin-top:22px">
+      <div class="st"><b>34,062</b><span>questions<span class="q" data-t="questions" tabindex="0" role="button"
+  aria-label="what this means">?</span></span></div>
+      <div class="st"><b>136k</b><span>answers graded<span class="q" data-t="graded" tabindex="0" role="button"
+  aria-label="what this means">?</span></span></div>
+      <div class="st"><b class="teal">0.840</b><span>AUC<span class="q" data-t="auc" tabindex="0" role="button"
+  aria-label="what this means">?</span></span></div>
+      <div class="st"><b class="red">950</b><span>blind spots found<span class="q" data-t="silent" tabindex="0" role="button"
+  aria-label="what this means">?</span></span></div>
+    </div>
+  </div><div class="slide">
+    <div class="eyebrow">the published idea</div>
+    <h2>“If the models disagree, one of them is probably wrong.”</h2>
+    <p class="big">So ask several models the same question. Measure how much they
+      differ. Use that as a warning light for hallucination.</p>
+    <p class="lede">It works, and it is already published. Farquhar <i>et al.</i>
+      (<i>Nature</i>, 2024) report a detection score of <b>AUROC 0.790</b><span class="q" data-t="auroc" tabindex="0" role="button"
+  aria-label="what this means">?</span>
+      for one model disagreeing with itself; Gorbett &amp; Jana (2026) report
+      <b>AUROC 0.727</b> for the cross-model version, both on other datasets and so not
+      directly comparable. This project reproduces the
+      same measure at <b class="teal">AUROC 0.840</b> on 34,062
+      questions — so the signal is <em>not</em> the contribution.</p>
+  </div><div class="slide">
+    <div class="eyebrow">the gap disagreement detectors do not measure</div>
+    <h2>What if they all agree — and they are all <span class="red">wrong</span>?</h2>
+    <div class="cols" style="margin-top:6px">
+      <div>
+        <p>Disagreement can only warn you about errors that <b>show up as a
+          disagreement</b>. A shared mistake produces perfect consensus and a
+          confident, quiet, wrong answer.</p>
+        <p class="lede">Every detector built on disagreement is blind here — by
+          construction, not by accident. This project calls these cases
+          <b class="violet">silent consensus</b> (blind spots) and builds the view that finds them.</p>
+      </div>
+      <div>
+        <div class="muted mono" style="font-size:12px;margin-bottom:8px">
+          Who served as a Major General in the war of 1939–1945?</div>
+        <div class="quad">
+          <div class="mbox"><div class="mn">Llama-4-Maverick</div><div class="ma red">Eisenhower</div></div>
+          <div class="mbox"><div class="mn">Qwen3-235B</div><div class="ma red">Eisenhower</div></div>
+          <div class="mbox"><div class="mn">Mistral-Small-3.2</div><div class="ma red">Eisenhower</div></div>
+          <div class="mbox"><div class="mn">Gemma-3-27B</div><div class="ma red">Eisenhower</div></div>
+        </div>
+        <p class="mono" style="font-size:12.5px;margin-top:10px">
+          disagreement <b>0.00</b> · mean confidence <b>0.97</b><br>
+          correct answer <b class="green">Carroll W. McColpin</b></p>
+      </div>
+    </div>
+  </div><div class="slide">
+    <div class="eyebrow">the premise, measured</div>
+    <h2>Four developers is supposed to mean four independent brains.
+      <span class="red">It does not.</span></h2>
+    <p class="lede">Within each dataset, multiply the four models' error rates to get
+      how often independence says all four should be wrong at once, and add the
+      datasets up. The four are wrong together
+      <b class="red">3.3×</b> as often as that <span class="muted">(95% CI
+      3.24–3.41)</span>.</p>
+    <div class="bars" style="margin-top:14px">
+      <div class="bar">
+        <div class="lb">predicted, if independent</div>
+        <div class="tr"><div class="fl" data-w="30.1"
+          style="background:var(--ink3)"></div></div>
+        <div class="vl">3,257</div>
+      </div>
+      <div class="bar hi">
+        <div class="lb">observed — all four wrong</div>
+        <div class="tr"><div class="fl" data-w="100" style="background:var(--red)"></div></div>
+        <div class="vl">10,819</div>
+      </div>
+      <div class="bar">
+        <div class="lb">…and <em>identical</em>, so undetectable</div>
+        <div class="tr"><div class="fl" data-w="8.8"
+          style="background:var(--violet)"></div></div>
+        <div class="vl">950</div>
+      </div>
+    </div>
+    <div class="cols" style="margin-top:6px">
+      <div>
+        <p>Within each dataset the mean pairwise error correlation is
+          <b class="red">φ = 0.44–0.60</b>, where
+          independence would be 0. One plausible reason, not tested here: they learned
+          from much of the same web.</p>
+      </div>
+      <div>
+        <p><b>The third bar is the thesis.</b> Wrong together is survivable —
+          four models can be wrong four <em>different</em> ways, and then they
+          disagree and the detector fires. Wrong <b>and unanimous</b> is the
+          case the warning light cannot see.</p>
+      </div>
+    </div>
+    <p class="lede" style="font-size:13.5px;margin-top:4px"><b>Pooled over the whole
+      corpus the figure is larger</b> — all four wrong on 31.8% against
+      5.2% predicted, 6.1×, φ
+      0.654 — and it is the weaker number: it multiplies error rates
+      averaged over datasets whose difficulty differs several-fold, and that alone
+      manufactures co-failure. Quote the within-dataset figure.</p>
+    <p class="mono muted" style="font-size:12px;margin-top:2px">
+      by dataset: popqa 2.8×  ·  triviaqa 67.3×  ·  halueval 3.7×  ·  truthfulqa 44.9×
+    </p>
+  </div><div class="slide">
+    <div class="eyebrow">what was built</div>
+    <h2>Four model families, one corpus, every answer graded</h2>
+    <div class="cols">
+      <div>
+        <table>
+          <tr><td class="k">questions asked<span class="q" data-t="asked" tabindex="0" role="button"
+  aria-label="what this means">?</span></td><td class="mono"><b>42,591</b></td></tr>
+          <tr><td class="k">duplicate questions removed</td><td class="mono">8,489</td></tr>
+          <tr><td class="k">analysed <span class="muted">(gradeable, unique)</span><span class="q" data-t="analysed" tabindex="0" role="button"
+  aria-label="what this means">?</span></td><td class="mono"><b>34,062</b></td></tr>
+          <tr><td class="k">answers analysed<span class="q" data-t="gens" tabindex="0" role="button"
+  aria-label="what this means">?</span></td><td class="mono"><b>136,248</b></td></tr>
+          <tr><td class="k">failed generations<span class="q" data-t="fails" tabindex="0" role="button"
+  aria-label="what this means">?</span></td><td class="mono green"><b>0</b></td></tr>
+          <tr><td class="k">datasets<span class="q" data-t="ds4" tabindex="0" role="button"
+  aria-label="what this means">?</span></td><td class="mono">4</td></tr>
+        </table>
+        <p class="lede" style="margin-top:12px;font-size:14px">
+          40 are TruthfulQA items whose reference answer is
+          literally <i>“I have no comment”</i> — no correctness label exists,
+          so grading them would invent one. The other 8,489 were the
+          <b>same question twice</b>: every earlier check worked on question ids,
+          which are unique by construction. Unique ids are not unique questions.</p>
+      </div>
+      <div>
+        <div class="card">
+          <h3 style="font-size:16px">2025 ensemble<span class="q" data-t="active" tabindex="0" role="button"
+  aria-label="what this means">?</span></h3>
+          <p class="mono" style="font-size:clamp(14px,1.35vw,18px);line-height:1.7;
+            margin:0;color:var(--ink)"><span style="display:flex;justify-content:space-between;gap:16px">
+  <span>Qwen3-235B</span><span class="muted" style="font-size:.86em">22B active · 235B total</span></span><span style="display:flex;justify-content:space-between;gap:16px">
+  <span>Gemma-3-27B</span><span class="muted" style="font-size:.86em">27B dense</span></span><span style="display:flex;justify-content:space-between;gap:16px">
+  <span>Llama-4-Maverick</span><span class="muted" style="font-size:.86em">17B active · 128 experts</span></span><span style="display:flex;justify-content:space-between;gap:16px">
+  <span>Mistral-Small-3.2</span><span class="muted" style="font-size:.86em">24B dense</span></span></p>
+          <h3 style="font-size:16px;margin-top:18px">2024 ensemble <span class="muted">— for comparison</span></h3>
+          <p class="mono" style="font-size:clamp(14px,1.35vw,18px);line-height:1.7;
+            margin:0;color:var(--ink2)"><span style="display:flex;justify-content:space-between;gap:16px">
+  <span>Gemma-2-9B</span><span class="muted" style="font-size:.86em">9B dense</span></span><span style="display:flex;justify-content:space-between;gap:16px">
+  <span>Llama-3.1-8B</span><span class="muted" style="font-size:.86em">8B dense</span></span><span style="display:flex;justify-content:space-between;gap:16px">
+  <span>Mistral-7B</span><span class="muted" style="font-size:.86em">7B dense</span></span><span style="display:flex;justify-content:space-between;gap:16px">
+  <span>Qwen2.5-7B</span><span class="muted" style="font-size:.86em">7B dense</span></span></p>
+        </div>
+        <p class="lede" style="font-size:14px;margin-top:12px">
+          Four different <em>makers</em>, not four sizes of one model — otherwise
+          shared training data guarantees shared errors and the comparison means nothing.</p>
+      </div>
+    </div>
+  </div><div class="slide">
+    <div class="eyebrow">the questions themselves</div>
+    <h2>Four benchmarks, picked for how <em>hard</em> they are</h2>
+    <div class="cols" style="gap:14px">
+      <div>
+        <div class="card" style="margin-bottom:10px">
+          <div class="dsn">PopQA<span>13,760 questions · 55% wrong</span><span class="q" data-t="ds_popqa" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+          <p class="lede" style="margin:0;font-size:15px">Wikipedia entities running
+            from household names down to almost nobody, each tagged with how many
+            people actually view its page. <b>The obscurity end.</b></p>
+        </div>
+        <div class="card">
+          <div class="dsn">HaluEval<span>10,000 questions · 50% wrong</span><span class="q" data-t="ds_halueval" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+          <p class="lede" style="margin:0;font-size:15px">Built to catch hallucination:
+            every question ships the true answer <i>and</i> a convincing fake.
+            <b>The richest source of blind spots we measured, by rate.</b></p>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:10px">
+          <div class="dsn">TriviaQA<span>9,962 questions · 14% wrong</span><span class="q" data-t="ds_triviaqa" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+          <p class="lede" style="margin:0;font-size:15px">Ordinary trivia, asked with
+            no reference text. <b>The easy end</b> — and that is its job: a detector
+            score needs questions the models get <em>right</em> too.</p>
+        </div>
+        <div class="card">
+          <div class="dsn">TruthfulQA<span>340 questions · 17% wrong</span><span class="q" data-t="ds_truthfulqa" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+          <p class="lede" style="margin:0;font-size:15px">Questions where the
+            <em>popular</em> answer is the false one. Too small to carry statistics —
+            kept for its human-written list of <b>why</b> each item fools people.</p>
+        </div>
+      </div>
+    </div>
+    <p class="lede" style="margin-top:14px">The ensemble gets <b>14%</b>
+      of TriviaQA wrong and <b>55%</b> of PopQA. That spread is the
+      whole reason for using four: a warning light can only be scored on a corpus that
+      contains both errors to catch <em>and</em> correct answers to leave alone, and no
+      single benchmark supplies both. The detection signal and the error correlation hold in all four.</p>
+  </div><div class="slide">
+    <div class="eyebrow">what was actually done with them</div>
+    <h2>Ask four models the same question. Then study what they did <em>together</em>.</h2>
+    <div class="flow">
+      <div class="fstep"><i>1</i><div><b>Ask</b>
+        <p>Every question goes to all four models, once each, same prompt, no
+          reference text — 136,248 answers.</p></div></div>
+      <div class="fstep"><i>2</i><div><b>Grade</b><span class="q" data-t="analysed" tabindex="0" role="button"
+  aria-label="what this means">?</span>
+        <p>Each answer marked right or wrong against the benchmark's own reference
+          answer — exact match, then aliases, then a meaning check.</p></div></div>
+      <div class="fstep"><i>3</i><div><b>Score two things per question</b>
+        <p>How confident each model was<span class="q" data-t="conf" tabindex="0" role="button"
+  aria-label="what this means">?</span> · how far apart the four answers
+          were, grouped by meaning rather than wording<span class="q" data-t="disagree" tabindex="0" role="button"
+  aria-label="what this means">?</span>.</p></div></div>
+      <div class="fstep"><i>4</i><div><b>Keep the silent ones</b>
+        <p>The questions where disagreement is <b>zero</b> and every one of the four
+          answers is <b>wrong</b> — <b class="red">950</b> of them.</p></div></div>
+      <div class="fstep"><i>5</i><div><b>Put them on a map</b><span class="q" data-t="mapping" tabindex="0" role="button"
+  aria-label="what this means">?</span>
+        <p>All 34,062 questions placed by what they are about, so you can
+          see whether the blind spots cluster or scatter.</p></div></div>
+    </div>
+    <p class="lede" style="margin-top:12px">Everything after this — every result
+      and all five views of the tool — is a question asked of that one table.</p>
+  </div><div class="slide">
+    <div class="eyebrow">how the 950 are isolated</div>
+    <h2>Not every error is a blind spot. These are the ones a check <em>cannot see</em>.</h2>
+    <div class="fn"><div class="lb">every question<span class="q" data-t="f_all" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+      <div class="seg" style="width:100%;background:#2a3566"></div>
+      <div class="vl">34,062</div><div></div><div class="nk" style="background:#2a3566;
+      opacity:.3;clip-path:polygon(0% 0,100% 0,81.90358757559744% 100%,18.09641242440256% 100%)"
+      ></div><div></div><div class="lb">at least one wrong<span class="q" data-t="f_any" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+      <div class="seg" style="width:63.80717515119488%;background:#3a4472"></div>
+      <div class="vl">21,734</div><div></div><div class="nk" style="background:#3a4472;
+      opacity:.3;clip-path:polygon(18.09641242440256% 0,81.90358757559744% 0,70.53901708648934% 100%,29.46098291351066% 100%)"
+      ></div><div></div><div class="lb">the ensemble's answer wrong<span class="q" data-t="f_maj" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+      <div class="seg" style="width:41.07803417297868%;background:#4a5490"></div>
+      <div class="vl">13,992</div><div></div><div class="nk" style="background:#4a5490;
+      opacity:.3;clip-path:polygon(29.46098291351066% 0,70.53901708648934% 0,65.88133403793083% 100%,34.118665962069166% 100%)"
+      ></div><div></div><div class="lb">all four wrong<span class="q" data-t="f_all4" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+      <div class="seg" style="width:31.762668075861665%;background:#8b5cf6"></div>
+      <div class="vl">10,819</div><div></div><div class="nk" style="background:#8b5cf6;
+      opacity:.3;clip-path:polygon(34.118665962069166% 0,65.88133403793083% 0,51.39451588280195% 100%,48.60548411719805% 100%)"
+      ></div><div></div><div class="lb on">all four wrong <b>and all four agreed</b><span class="q" data-t="f_silent" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+      <div class="seg" style="width:2.789031765603899%;background:linear-gradient(90deg,#f87171,#f472b6)"></div>
+      <div class="vl">950</div></div>
+    <p class="big"><b class="red">950</b> questions —
+      <b>2.8%</b> of the corpus, and
+      <b>8.8%</b> of the questions every model got wrong.</p>
+    <p class="lede"><b>Nothing is thrown away here.</b> All 34,062 questions stay
+      in the corpus, in the map and in the detection score — this is a <em>definition</em>,
+      not a filter. Read it the other way and it says the same thing: the four models
+      agreed on 12,181 questions<span class="q" data-t="f_unan" tabindex="0" role="button"
+  aria-label="what this means">?</span>, and on
+      <b>7.8%</b> of those <b>every model was wrong</b>.</p>
+    <p class="lede" style="font-size:14px"><b>"So just make it say <em>I don't
+      know</em> when confidence is low."</b><span class="q" data-t="abstain" tabindex="0" role="button"
+  aria-label="what this means">?</span> Measured, not argued.
+      In this region a threshold that catches
+      <b>80%</b> of the errors also destroys
+      <b>77%</b> of the correct answers —
+      confidence averages 0.947 when right and 0.929 when
+      wrong, and no line fits inside that.</p>
+  </div><div class="slide">
+    <div class="eyebrow">result 1 — the signal reproduces, and beats the alternative</div>
+    <h2>Asking four models beats asking one model four times</h2>
+    <div class="bars" style="margin-top:10px">
+      <div class="bar hi"><div class="lb">four models</div>
+    <div class="tr"><div class="fl" data-w="93.1111111111111"
+      style="background:linear-gradient(90deg,#2dd4bf,#60a5fa)"></div></div>
+    <div class="vl">0.838</div></div>
+      <div class="bar"><div class="lb">Mistral-Small-3.2 alone</div>
+    <div class="tr"><div class="fl" data-w="86.44444444444444"
+      style="background:#3a4472"></div></div>
+    <div class="vl">0.778</div></div><div class="bar"><div class="lb">Qwen3-235B alone</div>
+    <div class="tr"><div class="fl" data-w="84.55555555555556"
+      style="background:#3a4472"></div></div>
+    <div class="vl">0.761</div></div><div class="bar"><div class="lb">Llama-4-Maverick alone</div>
+    <div class="tr"><div class="fl" data-w="75.55555555555556"
+      style="background:#3a4472"></div></div>
+    <div class="vl">0.680</div></div><div class="bar"><div class="lb">Gemma-3-27B alone</div>
+    <div class="tr"><div class="fl" data-w="72.11111111111111"
+      style="background:#3a4472"></div></div>
+    <div class="vl">0.649</div></div>
+    </div>
+    <p class="lede">Same <b>6,436 questions</b><span class="q" data-t="n8000" tabindex="0" role="button"
+  aria-label="what this means">?</span> in both arms, same
+      generation budget — the only difference is whether the four answers come from
+      one model asked four times<span class="q" data-t="se" tabindex="0" role="button"
+  aria-label="what this means">?</span> or four models asked once.
+      <b>+0.060</b> over the best single
+      model<span class="q" data-t="scoring" tabindex="0" role="button"
+  aria-label="what this means">?</span>.</p>
+    <p class="lede" style="font-size:15px">On the <b>300-question pilot</b><span class="q" data-t="pilot300" tabindex="0" role="button"
+  aria-label="what this means">?</span>
+      single-model <em>won</em>, 0.813 to 0.788 — the opposite result, from the same code.
+      Effects measured on 300 questions have come out smaller or absent at full scale
+      <b>five times out of five</b> in this project, which is why the pilot is treated
+      as a test of the pipeline and never as a preview of the answer.</p>
+  </div><div class="slide">
+    <div class="eyebrow">result 2 (RQ1) — the blind spot is real, and it is not where we predicted</div>
+    <h2><span class="red">950</span> questions where every model
+      agreed and every model was wrong</h2>
+    <div class="bars">
+      <div class="bar"><div class="lb">popqa<span class="q" data-t="ds_popqa" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+    <div class="tr"><div class="fl" data-w="100"
+      style="background:#f87171"></div></div>
+    <div class="vl">439</div></div><div class="bar"><div class="lb">halueval<span class="q" data-t="ds_halueval" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+    <div class="tr"><div class="fl" data-w="83.37129840546697"
+      style="background:#f87171"></div></div>
+    <div class="vl">366</div></div><div class="bar"><div class="lb">triviaqa<span class="q" data-t="ds_triviaqa" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+    <div class="tr"><div class="fl" data-w="31.890660592255127"
+      style="background:#f87171"></div></div>
+    <div class="vl">140</div></div><div class="bar"><div class="lb">truthfulqa<span class="q" data-t="ds_truthfulqa" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+    <div class="tr"><div class="fl" data-w="1.1389521640091116"
+      style="background:#fbbf24"></div></div>
+    <div class="vl">5</div></div>
+    </div>
+    <p class="big">The proposal expected these to cluster in TruthfulQA — the dataset
+      built from human misconceptions. <b class="amber">99.5% of them are somewhere
+      else.</b></p>
+    <p class="lede" style="font-size:14px">These are the grader's counts. About a fifth
+      (21.1%) turn out to be answer-key errors, not model errors, which
+      leaves <b>750</b> real shared mistakes (slide 18).</p>
+    <p class="lede">In plain terms: we thought the models only failed together on
+      <b>trick questions</b><span class="q" data-t="adversarial" tabindex="0" role="button"
+  aria-label="what this means">?</span> — the ones written to catch people out.
+      They don't. Almost all shared mistakes are on ordinary trivia and everyday
+      Wikipedia facts. So this is <b>something the ensemble does</b>, not something one
+      nasty test set does to it — which means the tool is for any corpus, not just
+      adversarial ones.</p>
+  </div><div class="slide">
+    <div class="eyebrow">result 3 (RQ3) — the uncomfortable one</div>
+    <h2>The newer models make fewer mistakes. A <em>larger share</em> of what is left is shared.</h2>
+    <table style="margin:4px 0 14px">
+      <tr><th>on the same 34,062 questions<span class="q" data-t="sameq" tabindex="0" role="button"
+  aria-label="what this means">?</span></th><th>2024 models</th><th>2025 models</th></tr>
+      <tr><td class="k">ensemble answered wrong<span class="q" data-t="wrongrate" tabindex="0" role="button"
+  aria-label="what this means">?</span></td>
+          <td class="mono">53.4%</td><td class="mono green">41.1%</td></tr>
+      <tr><td class="k">shared blind-spot rate<span class="q" data-t="blindrate" tabindex="0" role="button"
+  aria-label="what this means">?</span></td>
+          <td class="mono">2.42%</td>
+          <td class="mono">2.79%</td></tr>
+      <tr><td colspan="3" class="muted" style="font-size:12px;text-align:left">grader's count · after
+          re-checking answer keys the rise in this row is not significant (slide 19)</td></tr>
+      <tr><td class="k"><b>share of errors that are SHARED</b><span class="q" data-t="sharedshare" tabindex="0" role="button"
+  aria-label="what this means">?</span></td>
+          <td class="mono">4.5%</td>
+          <td class="mono red"><b>6.8%</b></td></tr>
+    </table>
+    <p class="big">The newer, larger models fix many mistakes, and a larger share of what
+      remains falls in the region disagreement cannot see.
+      <span class="muted" style="font-size:.7em">(one generation pair; size and
+      generation are not separated)</span></p>
+    <p class="lede">This is the safety argument: in the one upgrade measured here, a larger share of
+      the remaining mistakes is the kind a disagreement check cannot see.</p>
+    <p class="lede" style="font-size:14px"><b>Why is the error rate so high?</b>
+      Because these benchmarks are chosen to be hard — obscure Wikipedia entities and
+      questions written to bait a wrong answer. Nothing is filtered out first; these
+      are raw rates over all 34,062 questions. A warning light can only be
+      measured where there are errors to warn about.</p>
+  </div><div class="slide">
+    <div class="eyebrow">result 3b — what the blind region is made of</div>
+    <h2>It tracks how <span class="red">correlated</span> the models are.
+      Not how good they are.</h2>
+    <p class="lede">Eight models have answered the identical corpus, so every
+      subset of two, three or four of them is an ensemble that could have been deployed.
+      <b>154 of them</b>, each fully re-clustered by meaning, no new
+      generations, nothing spent.</p>
+    <div class="cols" style="margin-top:8px">
+      <div>
+        <table>
+          <tr><th style="text-align:left">ensemble size</th><th>blind-spot rate</th><th>range</th></tr>
+          <tr>
+            <td class="k" style="text-align:left">4 models <span class="muted">— the headline</span></td>
+            <td class="mono amber">2.79%</td>
+            <td class="mono muted">—</td></tr><tr>
+            <td class="k" style="text-align:left">3 models</td>
+            <td class="mono">4.01%</td>
+            <td class="mono muted">3.86–4.18%</td></tr><tr>
+            <td class="k" style="text-align:left">2 models</td>
+            <td class="mono">7.51%</td>
+            <td class="mono muted">7.13–8.84%</td></tr>
+        </table>
+        <p class="lede" style="font-size:14px;margin-top:8px">2025 models only, so no
+          generation is mixed in. <b>Never quote the headline rate without this
+          curve</b> — dropping one model of four raises the blind region by
+          44%.</p>
+      </div>
+      <div>
+        <table>
+          <tr><th style="text-align:left">within each size</th><th>k=2</th><th>k=3</th><th>k=4</th></tr>
+          <tr><td class="k" style="text-align:left">error <b>correlation</b> → blind rate</td>
+            <td class="mono red"><b>+0.87</b></td><td class="mono red"><b>+0.91</b></td><td class="mono red"><b>+0.92</b></td></tr>
+          <tr><td class="k" style="text-align:left">error <b>rate</b> → blind rate</td>
+            <td class="mono muted">-0.03</td><td class="mono muted">-0.22</td><td class="mono muted">-0.34</td></tr>
+        </table>
+        <p class="big" style="margin-top:10px">You cannot buy your way out with
+          better models. A less correlated ensemble has a smaller blind region,
+          and correlation is measurable before you deploy.</p>
+      </div>
+    </div>
+    <p class="lede" style="font-size:14px">And the trade is not free, which is the
+      opposite of what I predicted: correlation also tracks detection AUC
+      (k=2 +0.93 · k=3 +0.73 · k=4 +0.61),
+      so decorrelating shrinks the region the detector cannot see while weakening
+      it over the region it can. Second falsified prediction in this project.</p>
+  </div><div class="slide">
+    <div class="eyebrow">result 2b (RQ1) — the region the vote cannot see</div>
+    <h2>The vote is blind there. The <span class="teal">record</span> is not.</h2>
+    <p class="lede">On the 12,181 questions where all four models agreed,
+      disagreement is 0 by construction. Confidence was the only thing this project had
+      looked at, and it reaches AUC 0.592 — real, and useless as a gate.
+      Every other column of the record, combined: <b class="teal">0.772</b>.</p>
+    <div class="stats">
+      <div class="st"><b class="red">8.4%</b><span>wrong, if you answer everything</span></div>
+      <div class="st"><b>6.8%</b><span>keeping half, on confidence</span></div>
+      <div class="st"><b class="teal">3.0%</b><span>keeping half, on the record</span></div>
+      <div class="st"><b class="teal">2.1%</b><span>keeping the surest quarter</span></div>
+    </div>
+    <p class="big" style="margin-top:14px">This is the first direct test of the
+      project's design claim — that keeping the whole record, rather than just the
+      score, is what makes the findings possible.</p>
+    <p class="lede" style="font-size:14px">Out-of-fold, and audited for leakage before
+      it was believed: the first version had a leak (test-fold labels reached a
+      neighbourhood feature used in training), and the first fix was half a fix.
+      A third: duplicate questions sat on both sides of a fold, inflating the earlier
+      published 0.811 until folds were grouped by question text.
+      All three were corrected. It does not rescue
+      the blind region as a class — it ranks within it — and it needs a labelled
+      corpus to place a new question against.</p>
+  </div><div class="slide">
+    <div class="eyebrow">result 4 (RQ3) — what happens when you upgrade the models</div>
+    <h2>An upgrade<span class="q" data-t="upgrade" tabindex="0" role="button"
+  aria-label="what this means">?</span> <span class="amber">hides</span> blind spots
+      about twice as often as it inherits them</h2>
+    <div class="bars">
+      <div class="bar hi"><div class="lb">newly hidden<span class="q" data-t="emerged" tabindex="0" role="button"
+  aria-label="what this means">?</span> <span class="muted">a check would have flagged it in 2024, not in 2025</span></div>
+    <div class="tr"><div class="fl" data-w="100"
+      style="background:#fbbf24"></div></div>
+    <div class="vl">630</div></div>
+      <div class="bar"><div class="lb">now visible<span class="q" data-t="healed" tabindex="0" role="button"
+  aria-label="what this means">?</span> <span class="muted">they disagree again</span></div>
+    <div class="tr"><div class="fl" data-w="79.84126984126985"
+      style="background:#34d399"></div></div>
+    <div class="vl">503</div></div>
+      <div class="bar hi"><div class="lb">hidden in both<span class="q" data-t="persisted" tabindex="0" role="button"
+  aria-label="what this means">?</span> <span class="muted">agreed and wrong, both years</span></div>
+    <div class="tr"><div class="fl" data-w="50.79365079365079"
+      style="background:#f87171"></div></div>
+    <div class="vl">320</div></div>
+    </div>
+    <div class="cols" style="margin-top:8px">
+      <div><p><b>39%</b> of the 2024 models' blind spots survive the
+        upgrade <span class="muted">(320 of 823)</span>.</p></div>
+      <div><p><b>34%</b> of the 2025 models' blind spots were already
+        blind in 2024 <span class="muted">(320 of 950)</span>.</p></div>
+    </div>
+    <p class="lede" style="font-size:14px"><b>The axis is detectability, not
+      correctness.</b><span class="q" data-t="detect" tabindex="0" role="button"
+  aria-label="what this means">?</span> 80% of the newly hidden were already wrong in 2024 — they
+      simply <em>disagreed</em>, so a check could catch them. Both arms cover the
+      identical corpus, so every count is exact — no sampling, no reweighting.</p>
+  </div><div class="slide">
+    <div class="eyebrow">result 5 (RQ4) — so can you fix it?</div>
+    <h2>Retrieval repairs ignorance. It barely touches a <em>belief</em>.</h2>
+    <div class="bars">
+      <div class="bar"><div class="lb">obscure entities<span class="q" data-t="obscurity" tabindex="0" role="button"
+  aria-label="what this means">?</span> <span class="muted">n=500</span></div>
+    <div class="tr"><div class="fl" data-w="7.199999999999999"
+      style="background:#3a4472"></div></div>
+    <div class="vl">7%</div></div>
+      <div class="bar hi"><div class="lb">&nbsp;&nbsp;+ documents<span class="q" data-t="retr" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+    <div class="tr"><div class="fl" data-w="72.39999999999999"
+      style="background:linear-gradient(90deg,#34d399,#2dd4bf)"></div></div>
+    <div class="vl">72%</div></div>
+      <div class="bar"><div class="lb">misconceptions<span class="q" data-t="misconception" tabindex="0" role="button"
+  aria-label="what this means">?</span> <span class="muted">n=57</span></div>
+    <div class="tr"><div class="fl" data-w="24.6"
+      style="background:#3a4472"></div></div>
+    <div class="vl">25%</div></div>
+      <div class="bar hi"><div class="lb">&nbsp;&nbsp;+ documents<span class="q" data-t="retr" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+    <div class="tr"><div class="fl" data-w="38.6"
+      style="background:linear-gradient(90deg,#fbbf24,#f472b6)"></div></div>
+    <div class="vl">39%</div></div>
+    </div>
+    <p class="big">Missing knowledge: <b class="green">+65 points</b><span class="q" data-t="points" tabindex="0" role="button"
+  aria-label="what this means">?</span>.
+      Absorbed misconception: <b class="amber">+14</b>.</p>
+    <p class="lede">If the model simply never knew a fact, handing it the page fixes
+      the answer. If the model <em>learnt something false</em>, it mostly does not —
+      and the misconception gain is small enough (p = 0.077) that it may be no gain
+      at all. A <b>4.7×</b> gap<span class="q" data-t="dissoc" tabindex="0" role="button"
+  aria-label="what this means">?</span>, and
+      it tells an engineer which errors are worth attacking with documents and
+      which need something else entirely.</p>
+  </div><div class="slide">
+    <div class="eyebrow">result 6 (RQ5) — and if the model searches for itself?</div>
+    <h2>Give them a search box. <span class="red">Two thirds stay wrong.</span></h2>
+    <p class="lede" style="margin-bottom:10px">The last slide <em>handed</em> the model a
+      document. Here nobody hands it anything: each model decides whether to look
+      something up, writes its own queries, and gets up to four lookups<span class="q" data-t="agentic" tabindex="0" role="button"
+  aria-label="what this means">?</span>.
+      Run twice — once against Wikipedia, once against <b>open web search</b><span class="q" data-t="websearch" tabindex="0" role="button"
+  aria-label="what this means">?</span>.</p>
+    <div class="bars">
+      <div class="bar"><div class="lb">searching Wikipedia<span class="q" data-t="arm_wiki" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+    <div class="tr"><div class="fl" data-w="28.676470588235293"
+      style="background:linear-gradient(90deg,#34d399,#2dd4bf)"></div></div>
+    <div class="vl">39/136 — 29%</div></div>
+      <div class="bar"><div class="lb">searching the open web<span class="q" data-t="arm_web" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+    <div class="tr"><div class="fl" data-w="30.14705882352941"
+      style="background:linear-gradient(90deg,#60a5fa,#a78bfa)"></div></div>
+    <div class="vl">41/136 — 30%</div></div>
+      <div class="bar hi"><div class="lb"><b>not fixed by either</b><span class="q" data-t="arm_neither" tabindex="0" role="button"
+  aria-label="what this means">?</span></div>
+    <div class="tr"><div class="fl" data-w="64.70588235294117"
+      style="background:linear-gradient(90deg,#f87171,#f472b6)"></div></div>
+    <div class="vl">88/136 — 65%</div></div>
+    </div>
+    <p class="big">Two independent sources, four makers, every model free to
+      search<span class="q" data-t="agentgood" tabindex="0" role="button"
+  aria-label="what this means">?</span> — and <b class="red">65%</b> of the
+      blind spots do not move.</p>
+    <p class="lede">The encyclopedia and the open web are <b>indistinguishable</b>
+      <span class="q" data-t="mcnemar" tabindex="0" role="button"
+  aria-label="what this means">?</span>: only 16 of 136 questions
+      came out differently between them. Until this run every document had come from
+      Wikipedia; asking the open web as well did not change the answer.</p>
+  </div><div class="slide">
+    <div class="eyebrow">result 7 — is it ignorance, or is it belief?</div>
+    <h2>Tell it that it might be wrong. <span class="red">Almost nothing moves.</span></h2>
+    <p class="lede">Retrieval and search both ask whether the model can <em>find</em>
+      the fact. These two prompts ask whether it <b>holds the belief</b> — no
+      documents, no retriever. Run on all 950 blind spots
+      <b>and on 317 questions the ensemble already had right</b>,
+      because "repaired 1%" means nothing without what it broke.</p>
+    <table style="margin:8px 0 12px">
+      <tr><th style="text-align:left">prompt</th><th>repaired</th><th>broke, any reading</th><th>broke, majority wrong</th></tr>
+      <tr><td class="k" style="text-align:left"><b>&ldquo;Some sources disagree. Reconsider.&rdquo;</b><br>
+            <span class="muted" style="font-size:.85em">a reason to doubt, and no new information</span></td>
+          <td class="mono ">0.7% <span class="muted">(7)</span></td>
+          <td class="mono muted">3.8% <span class="muted">(12, 10 of them 2&ndash;2 ties)</span></td>
+          <td class="mono red">0.6% <span class="muted">(2)</span></td></tr>
+      <tr><td class="k" style="text-align:left"><b>&ldquo;If unsure, say I don&rsquo;t know.&rdquo;</b><br>
+            <span class="muted" style="font-size:.85em">the most common suggestion this project gets</span></td>
+          <td class="mono amber">0.0% <span class="muted">(0)</span></td>
+          <td class="mono muted">10.7% <span class="muted">(34, 31 of them 2&ndash;2 ties)</span></td>
+          <td class="mono red">0.9% <span class="muted">(3)</span></td></tr>
+    </table>
+    <div class="cols">
+      <div><p class="big">Counter-evidence does not move the belief either way:
+        requiring a majority of the four to be wrong, it repairs 0.7% and breaks
+        0.6%. Permission to abstain repairs
+        <b>zero of 950</b>
+        — upper bound 0.40%.</p>
+        <p class="lede" style="font-size:13.5px">An earlier version of this slide said
+        counter-evidence breaks four answers for every one it repairs. 10
+        of its 12 &ldquo;broken&rdquo; controls were 2&ndash;2 ties, where the
+        tie rule, not the model, decided the verdict; that claim is retired.</p></div>
+      <div><p>And the hedging is real: at least one model abstained on
+        <b class="amber">55.1%</b> of blind spots against
+        <b>28.4%</b> of correct ones — a
+        1.9&times; lift. It hedges more
+        often on what it is about to get wrong, and <b>it never converts</b>.</p></div>
+    </div>
+    <p class="lede" style="font-size:14px">The behavioural twin of the confidence
+      result, reached from the other side: RQ1 measured a number the model emits,
+      this measured what it does when asked outright. Same answer.</p>
+  </div><div class="slide">
+    <div class="eyebrow">a correction to our own headline</div>
+    <h2>How many of the 950 are <span class="red">real</span>?</h2>
+    <p class="lede">A blind spot is a question the automatic grader marked wrong
+      for all four models. So the first thing to ask about 950 is how
+      many of them the <b>grader</b> got wrong. Until 25 August 2026 this project
+      answered <b>&ldquo;at most 5.6%&rdquo;</b>. That number counted one kind of
+      mistake and was reported as though it counted all of them.</p>
+    <div class="cols" style="margin-top:6px">
+      <div>
+        <table>
+          <tr><th style="text-align:left">question set</th><th>grader too strict</th></tr>
+          
+            <tr><td class="k" style="text-align:left">halueval
+              <span class="muted">n=366</span></td>
+              <td class="mono red">33.9%</td></tr>
+            <tr><td class="k" style="text-align:left">triviaqa
+              <span class="muted">n=140</span></td>
+              <td class="mono red">33.6%</td></tr>
+            <tr><td class="k" style="text-align:left">popqa
+              <span class="muted">n=439</span></td>
+              <td class="mono ">6.2%</td></tr>
+          <tr><td class="k" style="text-align:left"><b>all of them</b></td>
+              <td class="mono red"><b>21.1%</b></td></tr>
+        </table>
+        <p class="lede" style="font-size:14px;margin-top:8px">
+          All 950 sent to a judge with the grade hidden.
+          <b>750</b> survive as genuine — a rate of
+          2.2%, not 2.8%.</p>
+      </div>
+      <div>
+        <div class="card"><h3>What the grader called wrong</h3>
+          <p class="mono" style="font-size:12.5px;line-height:1.9;margin:0">
+            &ldquo;Bangladesh&rdquo; <span class="muted">for</span> &ldquo;People&rsquo;s Republic of Bangladesh&rdquo;<br>
+            &ldquo;1640s&rdquo; <span class="muted">for</span> &ldquo;40&rsquo;s&rdquo;<br>
+            &ldquo;The bumblebee bat&rdquo; <span class="muted">for</span> &ldquo;Bat&rdquo;<br>
+            &ldquo;Constantine X Doukas&rdquo; <span class="muted">for</span> &ldquo;Konstantinos X Doukas&rdquo;<br>
+            &ldquo;Smoking&rdquo; <span class="muted">for</span> &ldquo;Tobacco or alcohol&rdquo;</p></div>
+        <p class="lede" style="font-size:14px;margin-top:10px">The old test looked for
+          answers <i>inside</i> the key. None of these is inside anything, so it
+          could never have found them. <b>A bound is only as wide as the test that
+          produced it.</b></p>
+      </div>
+    </div>
+    <p class="big" style="margin-top:10px">This makes our headline
+      <em>smaller</em>. It is on a slide because most biases this project has found
+      in itself have run the other way.</p>
+  </div><div class="slide">
+    <div class="eyebrow">result 4b (RQ3) &mdash; and it retires one of our own claims</div>
+    <h2>The grader is <span class="red">stricter</span> on the newer models.
+      We had assumed it was not.</h2>
+    <p class="lede">Every generation result compares two arms, and only one of
+      them had ever been adjudicated. The gap was covered by an argument:
+      <i>both arms share a grader, so a uniform strictness cancels.</i> It is not
+      uniform. The 2024 arm's <b>823</b> blind spots were judged with the
+      same judge, prompt and rule.</p>
+    <div class="cols" style="margin-top:6px">
+      <div>
+        <table>
+          <tr><th style="text-align:left">judge</th><th>2024</th><th>2025</th><th>gap</th></tr>
+          <tr>
+      <td class="k" style="text-align:left">Qwen3-235B
+        <span class="muted">&mdash; in the 2025 ensemble</span></td>
+      <td class="mono">15.19%</td>
+      <td class="mono">21.05%</td>
+      <td class="mono red"><b>+5.9 pts</b></td></tr><tr>
+      <td class="k" style="text-align:left">Olmo-3.1-32B
+        <span class="muted">&mdash; in neither arm</span></td>
+      <td class="mono">17.62%</td>
+      <td class="mono">24.63%</td>
+      <td class="mono red"><b>+7.0 pts</b></td></tr>
+        </table>
+        <p class="lede" style="font-size:14px;margin-top:8px">Two judges, because
+          the first result had to be attacked before it could be believed. The
+          case representative is the first model in sorted order &mdash; so every
+          2025 case was judged on <b>Qwen3-235B's own answer, by Qwen3-235B</b>.
+          Self-favouring inflates exactly this gap. Re-judging both arms with
+          <b>Olmo-3.1-32B</b>, which is in neither ensemble,
+          <b class="red">widened</b> it.</p>
+      </div>
+      <div>
+        <table>
+          <tr><th style="text-align:left">the three categories</th><th>persisted</th><th>emerged</th><th>ratio</th></tr>
+          <tr><td class="k" style="text-align:left">as graded</td>
+            <td class="mono">320</td>
+            <td class="mono">630</td>
+            <td class="mono">1.97&times;</td></tr>
+          <tr><td class="k" style="text-align:left"><b>adjudicated</b></td>
+            <td class="mono"><b>239</b></td>
+            <td class="mono"><b>511</b></td>
+            <td class="mono green"><b>2.14&times;</b></td></tr>
+        </table>
+        <p class="lede" style="font-size:14px;margin-top:8px">
+          <b class="green">The ratio survives</b> and slightly strengthens: an
+          upgrade still creates about twice as many newly hidden cases as it
+          inherits. <b class="red">The growth in the total is not significant</b> &mdash;
+          698 genuine blind spots become
+          750; paired over the same questions, exact McNemar gives
+          <span class="mono">p = 0.101</span>
+          (Olmo-3.1-32B: <span class="mono">p = 0.226</span>).
+          That claim is withdrawn.</p>
+      </div>
+    </div>
+    <p class="big" style="margin-top:10px">When a measurement carries a known
+      systematic error, <b>prefer the ratio to the level</b> &mdash; the level
+      carries the error, the ratio mostly cancels it.</p>
+  </div><div class="slide">
+    <div class="eyebrow">the part a slide deck usually leaves out</div>
+    <h2>Twice, this project produced a clean result that was <span class="red">not true</span></h2>
+    <p class="lede" style="margin-bottom:14px">Both times the table looked
+      finished. Nothing crashed, no error appeared, and the numbers were internally
+      consistent. Here is what each one actually was, and the check that caught it.</p>
+    <div class="cols">
+      <div class="card bad">
+        <h3 class="red">1 · We were not testing the models we thought</h3>
+        <p style="font-size:15px;margin:0">The experiment compared 2024 models against
+          2025 models. We asked the provider for the 2024 model and it quietly served
+          the <b>2025 one under the old name</b> for some of the models — so the
+          comparison partly measured the new models against themselves. Two whole experiments<span class="q" data-t="arm" tabindex="0" role="button"
+  aria-label="what this means">?</span>, <b>340,728 answers</b>,
+          measured nothing and were thrown away.</p>
+        <p class="mono muted" style="font-size:12.5px;margin:9px 0 0">
+          caught by: are these two "different" models giving identical answers? up to 99.6% identical.<br>
+          fixed by: a gate that checks model identity before any paid run starts</p>
+      </div>
+      <div class="card bad">
+        <h3 class="red">2 · A finding produced by a broken tool</h3>
+        <p style="font-size:15px;margin:0">The result read <i>"giving models documents
+          does not help them"</i> — a clean table, reproduced <b>three times</b>. At first
+          the search step returned <b>nothing at all</b> (cached rate-limit errors), so the
+          models were handed blank pages. Once that was fixed, searching on the whole
+          question returned <b>off-topic pages</b>.</p>
+        <p class="mono muted" style="font-size:12.5px;margin:9px 0 0">
+          caught by: is the correct answer even present in the text we handed over? 8%.<br>
+          fixed by: fetching the entity's own Wikipedia page instead. 8% → 70%, and the result reversed</p>
+      </div>
+    </div>
+    <p class="lede" style="margin-top:16px"><b>78 defects found, 78 fixed, zero open.</b>
+      Every one, its cause and its fix is written down in <span class="mono">ISSUES.md</span>;
+      every design choice and the options rejected are in <span class="mono">DECISIONS.md</span>.</p>
+  </div><div class="slide">
+    <div class="eyebrow">and this became a finding of its own</div>
+    <h2>Most biases we found in the numbers made our own results look <em>better</em></h2>
+    <p class="lede" style="margin-bottom:14px">Bugs should land in random
+      directions. These did not — <b>most biases found in the numbers leaned the same way</b>, toward
+      the answer we were hoping for. Four examples:</p>
+    <div class="cols">
+      <div>
+        <ul>
+          <li><b>Small samples looked better than they were.</b> Every effect measured
+            on 300 questions came out smaller, or vanished, at full scale — five times
+            out of five.</li>
+          <li><b>The earlier graders were too generous:</b> when they erred, they
+            marked wrong answers <em>correct</em> — which hides blind spots and
+            flatters the detection score. <span class="muted">Hand-labelling later
+            cleared the final grader (31 generous vs
+            39 harsh, across 244 judged
+            cases in the target stratum); the bias was real in
+            the three that came before it.</span></li>
+          <li><b>The one bug that tilted the head-to-head comparison handicapped
+            the competing method</b>: its arm ran without retries.</li>
+          <li><b>Fixing things created things.</b> Three of the four defects found in
+            one audit were introduced by that same day's fixes.</li>
+        </ul>
+      </div>
+      <div class="card good">
+        <h3 class="green">Why this belongs in the thesis</h3>
+        <p style="font-size:15px;margin:0">If the biases had been random, about half would
+          have made the results look <em>worse</em>. Few did, and the exceptions are logged. So "the errors were small,
+          and in our favour" is not a sentence anyone should accept — including us.<br><br>
+          A pipeline that can produce a confident, coherent, wrong table is the normal
+          case, not the exception. <b>So the methodology chapter is about how each
+          number was attacked, not just what it came out as.</b></p>
+      </div>
+    </div>
+  </div><div class="slide">
+    <div class="eyebrow">the contribution</div>
+    <h2>The tool: five questions, five linked views</h2>
+    <div class="cols" style="gap:18px">
+      <div>
+        <div class="card" style="margin-bottom:10px"><h3>The map</h3>
+          <p class="lede" style="margin:0;font-size:14.5px"><i>Where do the errors live?</i>
+          34,062 questions placed by similarity. Blind spots turn out to
+          <b>cluster</b> — invisible in any table of averages.</p></div>
+        <div class="card"><h3>Inspector</h3>
+          <p class="lede" style="margin:0;font-size:14.5px"><i>Why did all four fail together?</i>
+          Every answer and confidence, side by side, with a label you leave behind.</p></div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:10px"><h3>Generation diff</h3>
+          <p class="lede" style="margin:0;font-size:14.5px"><i>Did the upgrade fix this, or cause it?</i>
+          2024 against 2025 on the same question — tagged persisted, healed or emerged.</p></div>
+        <div class="card" style="margin-bottom:10px"><h3>Signal strength</h3>
+          <p class="lede" style="margin:0;font-size:14.5px"><i>How much should I trust this here?</i>
+          0.840 overall hides 0.683 on one
+          dataset and 0.861 on another.</p></div>
+        <div class="card"><h3>Which ensemble? <span class="muted" style="font-size:12px">new</span></h3>
+          <p class="lede" style="margin:0;font-size:14.5px"><i>Given a budget of two, three or four
+          models, which ones?</i> 154 ensembles
+          scored for nothing — and the answer is not “the most accurate”.</p></div>
+      </div>
+    </div>
+    <p class="lede mono" style="font-size:12.5px;margin-top:12px;color:var(--ink3)">
+      D3 + SVG for the analytical panels — real scales, real axes, brushing.
+      The map stays canvas: 34,062 marks are expected to be too many for an SVG
+      data-join to redraw smoothly (a design judgement, not a measurement). The mark count picks the renderer, not the library.</p>
+    <div style="margin-top:18px">
+      <a class="cta" href="https://faultlines-tool.vercel.app">Open the tool →</a>
+      <!-- Labelled, not removed. The page is a genuine record of how the
+           pipeline is built, and its numbers are all pilot-era -- see ISSUES
+           #47. An unlabelled link from a results deck to a page reporting the
+           OPPOSITE baseline result is how a reviewer finds a contradiction
+           before you do. -->
+      <a class="cta ghost" href="walkthroughs.html">two documented paths through it →</a>
+      <!-- The caveat that used to sit here -- "proposal-era numbers" -- was
+           honest for a year and stopped being true on 2026-08-25, when the page
+           was rebuilt against the real run (ISSUES #53). A stale WARNING is the
+           same defect class as a stale number: it tells a reader to discount a
+           page that is now correct. -->
+      <a class="cta ghost" href="pipeline.html">the pipeline, level by level</a>
+    </div>
+  </div><div class="slide">
+    <div class="eyebrow">who it is for</div>
+    <h2>How is this tool useful, and to whom?</h2>
+    <p class="lede" style="margin-top:0">It shows <b>where a “the models disagree” warning goes blind</b> —
+      which one accuracy number cannot show — and lets you read those exact cases.</p>
+    <style>#whofor td,#whofor th{text-align:left;vertical-align:top}</style>
+    <table id="whofor" style="margin:6px 0 14px">
+      <tr><th style="width:19%">who</th><th style="width:33%">what they find</th>
+          <th style="width:17%">where in the tool</th><th>what they do differently</th></tr>
+      <tr><td class="k"><b>ML engineer</b><br>
+            <span class="muted" style="font-size:13px">shipping a system that trusts
+            the models when they agree</span></td>
+        <td>of 12,181 questions where all four agree, every model
+            is wrong on <b class="red">7.8%</b> — and those
+            wrong ones <b>cluster by topic</b></td>
+        <td>tab 1 the map → tab 2 read the cases</td>
+        <td>sends the risky topics to search or to a person instead of trusting
+            agreement</td></tr>
+      <tr><td class="k"><b>Safety researcher</b><br>
+            <span class="muted" style="font-size:13px">asking whether better models
+            fix this</span></td>
+        <td>newer models make fewer mistakes, but the share that are shared rose
+            <b>4.5% → <span class="red">6.8%</span></b>;
+            an upgrade hides about 2 new blind spots for every 1 it carries over</td>
+        <td>tab 3 did upgrading help?</td>
+        <td>plans for the blind spot now instead of waiting for the next model</td></tr>
+      <tr><td class="k"><b>Benchmark curator</b><br>
+            <span class="muted" style="font-size:13px">maintaining an answer
+            key</span></td>
+        <td>about 21.1% of blind spots are the answer key's
+            fault — “Bangladesh” rejected for “People's Republic of Bangladesh”,
+            “Smoking” rejected for “Tobacco or alcohol”</td>
+        <td>tab 2, “answer key looks strict” (54 flagged)</td>
+        <td>adds accepted alternatives and updates stale answers</td></tr>
+    </table>
+    <p class="lede" style="font-size:14px"><b>Why a tool and not a table:</b> “did this question get
+      fixed by the upgrade, or did it just go quiet?” needs one question held fixed while the model
+      generation changes — a case, not an average. <span class="muted">Usefulness is argued through
+      walkthroughs; no user study was run (Chapter 6).</span></p>
+  </div><div class="slide">
+    <div class="eyebrow">where it stands</div>
+    <h2>Measurement, evaluation and the write-up are done. Final review is under way.</h2>
+    <table style="margin:4px 0 12px">
+      <tr><th align="left">part</th><th align="left" style="text-align:left">state</th></tr>
+      <tr><td class="k" align="left"><b>All model work</b> — RQ1 through RQ5<br>
+            <span class="muted" style="font-size:.85em">two full arms over one frozen
+            question set · 136,248 graded answers · 0 failed calls</span></td>
+          <td align="left" class="mono green">complete</td></tr>
+      <tr><td class="k" align="left"><b>The instrument</b> — five linked views<br>
+            <span class="muted" style="font-size:.85em">deployed · 430 blinded
+            verdicts labelled with a separate command-line tool, and a second annotator
+            agrees at &kappa; 0.970 · 78 defects fixed ·
+            70 tests passing</span></td>
+          <td align="left" class="mono green">complete</td></tr>
+      <tr><td class="k" align="left"><b>Evaluation</b> — analytical, no participants<br>
+            <span class="muted" style="font-size:.85em">what the instrument found while it was
+            being built · two documented discovery paths · a cognitive walkthrough that
+            flags two steps with no visible control · the tool's data size and rendering load</span></td>
+          <td align="left" class="mono green">complete</td></tr>
+      <tr><td class="k" align="left"><b>The thesis document</b><br>
+            <span class="muted" style="font-size:.85em">8 of 8 chapters drafted &middot;
+                 50,717 words (target 35,500) &middot;
+                 every figure that has a field in the exported records checked against them</span></td>
+          <td align="left" class="mono teal">drafted</td></tr>
+    </table>
+    <p class="big">The signal was prior work. The blind spot, the tool that finds it,
+      and the evidence that a newer, more accurate ensemble shares a larger fraction of
+      its mistakes (1.50×, one generation pair) — that is the contribution.</p>
+    <p class="lede" style="font-size:13.5px;margin-top:8px">The six-task study was
+      <b>not run</b>, and §6.1 says so in its first paragraph. The protocol, the
+      materials and an instrumented unmoderated mode are all still in the repository,
+      so anyone can run it later — and §6.6 writes down <b>two predictions</b> it would
+      score.</p>
+  </div><div class="slide">
+    <div class="eyebrow">the plan, and the one ask left</div>
+    <h2>Nothing left is waiting on anybody else's calendar.</h2>
+    <div class="cols">
+      <div>
+        <table>
+          <tr><th style="text-align:left">when</th><th style="text-align:left">work</th></tr>
+          <tr><td class="mono green" style="text-align:left;white-space:nowrap">done</td>
+              <td style="text-align:left">every experiment · intervals on every claim ·
+                second annotator · the analytical evaluation ·
+                <b>8 of 8 chapters drafted</b></td></tr>
+          <tr><td class="mono amber" style="text-align:left;white-space:nowrap">Oct</td>
+              <td style="text-align:left">final read-through · advisor feedback ·
+                <b>submit</b> (deadline mid-October 2026)</td></tr>
+          <tr><td class="mono muted" style="text-align:left;white-space:nowrap">after</td>
+              <td style="text-align:left">the preprint, assembled from the thesis and reordered —
+                <b>not part of the project</b></td></tr>
+        </table>
+        <p class="lede" style="font-size:14px;margin-top:10px">Everything else is cut
+          on purpose and written down as cut: a $5 experiment to separate model
+          generation from model size — reframed instead — and two of the four
+          planned walkthroughs. The full thesis is written, SFSU-formatted and
+          fact-checked: every figure in it that has a field in the exported records is
+          checked against them.
+          The preprint left the project on 30 August and will be assembled from the
+          thesis afterwards.</p>
+        <div class="mono" style="font-size:12px;color:var(--ink3);
+            display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:10px">
+          <span style="color:var(--teal)">1 introduction ✓</span><span style="color:var(--teal)">2 related work ✓</span><span style="color:var(--teal)">3 design ✓</span><span style="color:var(--teal)">4 method ✓</span><span style="color:var(--teal)">5 results ✓</span><span style="color:var(--teal)">6 evaluation ✓</span><span style="color:var(--teal)">7 limitations ✓</span><span style="color:var(--teal)">8 conclusion ✓</span>
+        </div>
+      </div>
+      <div>
+        <h3 class="amber">What I still need</h3>
+        <ul>
+          <li><b>Is the analytical evaluation enough?</b> No user study was run.
+            Chapter 6 reports a cognitive walkthrough and the
+            record of the instrument finding an error in <em>this project's own
+            headline number</em> — the correction that took the artifact bound from
+            5.6% to 21.1%. That is the call I most need yours on.</li>
+          <li><b class="green">Done, and it retired an argument.</b> The 2024 arm's 823
+            blind spots have now been adjudicated too. Grading is <b>not</b> equally
+            strict across generations — <span class="mono">15.2%</span> answer-key
+            artifacts against <span class="mono red">21.1%</span> (Qwen3-235B),
+            and <span class="mono">17.6%</span> against
+            <span class="mono red">24.6%</span> from Olmo-3.1-32B, a judge in
+            neither ensemble. “The RQ3 comparison survives because both arms share a grader”
+            was an argument and is now a measurement that <em>contradicts</em> it. The
+            RQ3 <b>ratio</b> survives (2.14×); the growth in the
+            <b>total</b> is not significant (exact McNemar
+            <span class="mono">p = 0.101</span>), and is withdrawn.</li>
+          <li><b class="green">Done.</b> A second annotator labelled 115 cases
+            blind — &kappa; 0.970
+            [0.924, 1.000],
+            99.0% agreement. That was the
+            largest open limitation in the thesis and it is closed.</li>
+          <li><b class="green">Done, and it paid.</b> All <b>154</b> ensembles buildable from the eight models were
+            scored. Across the 70 four-model ensembles, error correlation predicts the blind-spot rate at
+            <span class="mono red">+0.922</span>; mean error rate
+            predicts it at only <span class="mono">-0.336</span>.
+            <b>Pick an ensemble for decorrelation, not for accuracy</b> — that was a
+            scope call worth making.</li>
+        </ul>
+      </div>
+    </div>
+  </div><div class="slide" style="align-items:flex-start">
+    <h1 style="font-size:clamp(30px,5.2vw,68px)">Where ensembles fail<br>
+      <span class="grad">they fail together</span></h1>
+    <div class="stats" style="margin-top:24px">
+      <div class="st"><b class="teal">0.840</b><span>the signal works<span class="q" data-t="end_auc" tabindex="0" role="button"
+  aria-label="what this means">?</span></span></div>
+      <div class="st"><b class="red">750</b><span>and here it cannot<span class="q" data-t="end_silent" tabindex="0" role="button"
+  aria-label="what this means">?</span></span></div>
+      <div class="st"><b class="amber">630</b><span>newly hidden after an upgrade (as graded)<span class="q" data-t="end_emerged" tabindex="0" role="button"
+  aria-label="what this means">?</span></span></div>
+    </div>
+    <div style="margin-top:24px">
+      <a class="cta" href="https://faultlines-tool.vercel.app">Open the tool →</a>
+    </div>
+    <p class="lede mono" style="margin-top:26px;font-size:13px">
+      Shivani Bokka · M.S. Data Science &amp; Artificial Intelligence · San Francisco State University<br>
+      advisor Dr. Shahrukh Humayoun · VI-Lab</p>
+  </div><!--/baked:deck--></div>
+<div id="dots"></div>
+<div class="hint" id="hint"><kbd>←</kbd> <kbd>→</kbd> or <kbd>space</kbd> to move</div>
+<div id="hud">
+  <span id="num"></span>
+  <button id="prev">◀</button><button id="next">▶</button>
+</div>
+
+<script>
+"use strict";
+// Numbers come from summary.json, written by scripts/export_web.py. NOTHING in
+// this deck is typed by hand -- the previous version hard-coded a 300-question
+// pilot AUC of 0.788 and still showed it days after the corpus run replaced it.
+let S=null;
+const f3=v=>v.toFixed(3), pc=v=>Math.round(v*100)+'%', n0=v=>v.toLocaleString();
+// One decimal, for the small rates. pc() rounds 2.477% to "2%", which then
+// contradicts the "2.48%" on the shared-blind-spot table two slides later.
+const pc1=v=>(v*100).toFixed(1)+'%';
+// slide 10d: the arm's own case count, so 923 is never typed by hand.
+const j2=j=>n0(j.arm['2024'].n);
+// 2026-09-27 correction pass: a tip that states a figure is now a FUNCTION of S,
+// evaluated when it is shown (see show() in tips()). The module-scope strings
+// held the pre-deduplication corpus -- 42,551, 1,054, 0.862, 690 -- for a week
+// after the export moved, because nothing re-reads a string.
+const dsn=k=>S.signal.by_dataset.find(x=>x.dataset===k);
+const sgn=(v,d=3)=>(v>=0?'+':'')+v.toFixed(d);
+const ungr=()=>S.corpus.asked-S.corpus.duplicates-S.corpus.analysed;
+const cause=k=>S.rq4.by_cause.find(c=>c.cause===k);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WHERE THE TOOL LIVES.  The deck and the tool are two separate Vercel
+// projects, so in production the tool is NOT a relative path from here -- a
+// sibling folder does not exist at a deploy root, and `../faultlines-tool/`
+// would 404 on the live site while working perfectly on localhost.
+//
+// >>> AFTER THE FIRST `vercel --prod` OF faultlines-tool, PASTE ITS URL HERE. <<<
+const TOOL_URL = 'https://faultlines-tool.vercel.app';   // set 2026-07-29 after the tool's first deploy
+// Until then the deck still works locally, and a deployed deck degrades to a
+// visible note rather than a dead link.
+const isLocal = ['localhost','127.0.0.1',''].includes(location.hostname);
+const TOOL = TOOL_URL || (isLocal ? '../faultlines-tool/index.html' : '');
+// ─────────────────────────────────────────────────────────────────────────────
+
+// build() is deliberately OUTSIDE the catch. It used to sit inside the .then,
+// so any error thrown while rendering a slide -- a typo, a key that summary.json
+// does not carry yet -- fell through to .catch and the page announced
+// "summary.json not found". The file was right there. Now a missing file says so
+// and a broken template throws in the console, where it can be read.
+// cache:'no-cache' means REVALIDATE, not "never cache" -- the browser still
+// keeps the copy and still gets a 304 when nothing changed. Without it the page
+// is served fresh on a redeploy while summary.json comes from the browser cache,
+// so a returning reviewer reads a new deck wired to last week's numbers. That is
+// the same class of bug as the hard-coded 0.788 this file was built to end.
+fetch('summary.json',{cache:'no-cache'}).then(r=>r.json())
+  .then(d=>{S=d}).catch(()=>{S=null}).then(build);
+
+function toolBtn(label,ghost){
+  if(!TOOL) return `<span class="cta ghost" style="opacity:.6;cursor:default"
+    title="set TOOL_URL in index.html after deploying the tool">${label} — set TOOL_URL</span>`;
+  return `<a class="cta${ghost?' ghost':''}" href="${TOOL}">${label}</a>`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TOOLTIPS.  Keyed, not inline: a tip lives in this one object and the slide
+// only carries q('key').  Two reasons -- HTML inside a data-* attribute has to
+// be quote-escaped by hand (one stray " silently truncates the tip), and a
+// reader scanning this object can see every explanation the deck makes without
+// reading fourteen slides of markup.
+//
+// Rule for writing one: say what the number IS in plain words first, then the
+// arithmetic. No term is used in a tip that the tip itself does not define.
+const TIPS = {
+
+/* slide 1 — the four headline numbers */
+questions:()=>`<b>Questions the models were asked</b>, pooled from four public
+  question-answering benchmarks.<br>${n0(S.corpus.asked)} were asked.
+  ${n0(ungr())} are dropped because their official answer is literally
+  <i>"I have no comment"</i> — there is no right or wrong to score them against —
+  and <b>${n0(S.corpus.duplicates)}</b> because they were the same question twice:
+  TriviaQA's no-context split lists each question once per evidence source, and some
+  PopQA rows repeat template, subject and answer exactly.`,
+graded:()=>`Every question was answered <b>once by each of the four models</b>.<br>
+  ${n0(S.corpus.asked)} questions × 4 models = ${n0(S.corpus.asked*4)} answers, each
+  one then marked right or wrong automatically. The <b>${n0(S.corpus.generations)}</b>
+  that belong to the analysed questions are the ones counted here.`,
+auc:()=>`<b>AUC</b> — how well the models' disagreement predicts a wrong answer.<br>
+  Take one wrong answer and one right answer at random: ${f3(S.signal.overall.auc)} is the chance the
+  models disagreed more on the wrong one.
+  <span class="mono">0.50 = coin flip · 1.00 = perfect</span>`,
+silent:`Questions where <b>all four models gave the same answer and all four were
+  wrong</b>. Disagreement is zero here, so a warning light built on disagreement
+  never comes on. This project calls them <b>silent consensus</b>.`,
+
+/* slide 2 — the published numbers */
+auroc:`<b>AUROC</b> is the standard score for a hallucination detector, and it is
+  the same measure as the AUC on the previous slide: the chance that a wrong answer
+  is given a higher warning score than a right one.<br>All three numbers on this
+  slide are that one measure, but on different datasets and different models, so
+  they are not directly comparable: they show the same range, not a ranking.
+  <span class="mono">0.50 = coin flip · 0.70 respectable · 0.80 strong</span>`,
+
+/* slide 4 — the corpus table */
+asked:`Every question sent to the models, including the 40 that turned out to have
+  no gradeable reference answer.`,
+analysed:`The questions that could actually be scored.<br><b>Grading runs in three
+  tiers</b>: exact match to the reference answer → match to an accepted alias
+  (<i>JFK</i> = <i>John F. Kennedy</i>) → a language model checks whether the two
+  sentences mean the same thing. Only a small share of answers need that last, weakest tier.`,
+gens:()=>`<b>${n0(S.corpus.asked)} questions × 4 models = ${n0(S.corpus.asked*4)} answers.</b><br>One answer per model
+  per question, temperature 0 so the run is repeatable, capped at 64 tokens. The
+  model's own token probabilities are kept as its confidence.<br>${n0(S.corpus.generations)}
+  of them belong to the ${n0(S.corpus.analysed)} analysed questions.`,
+fails:()=>`Calls that never returned a usable answer, even after retries. <b>Zero</b> —
+  every one of the ${n0(S.corpus.asked*4)} slots holds a real answer, so nothing had to be dropped,
+  guessed or filled in.`,
+active:`<b>Active parameters</b> — how much of the model actually runs on each word,
+  which is not the number in its name.<br>Llama-4-Maverick and Qwen3-235B are
+  <i>mixture-of-experts</i>: they hold a huge pile of weights but route each word
+  through a small slice of it. Qwen3 stores 235B and uses 22B. Mistral and Gemma are
+  <i>dense</i> — every weight runs every time, so the name is the real size.<br>Matched
+  on the active number (17 / 22 / 24 / 27B) the four are comparable, and the ensemble
+  is <b>four makers</b>. Matched on the name it would be four sizes, and any shared
+  error could be blamed on that instead.`,
+ds4:`PopQA, TriviaQA, HaluEval and TruthfulQA — the next slide is what each one is
+  for. Four rather than one so no single benchmark's quirks can carry a finding.`,
+
+/* slide 5 — the datasets */
+ds_popqa:`<b>PopQA</b> — questions about Wikipedia entities, each tagged with how many
+  page views that entity gets.<br>It is the only dataset here that ships a
+  <b>popularity</b> number, which is what lets us separate "the model is guessing on a
+  rare thing" from "the model believes something false" — and what answers the
+  objection that this project has only rediscovered that rare entities are hard.`,
+ds_triviaqa:`<b>TriviaQA</b> — general trivia, asked closed-book (no passage supplied).
+  <br>The easy end, and that is its job: a detection score needs questions the models
+  get <b>right</b> as well as wrong, or there is nothing to separate. Short answers
+  with long lists of accepted alternatives, so it grades cleanly, rarely needing the
+  weakest grading tier.`,
+ds_halueval:()=>`<b>HaluEval</b> — questions built to catch hallucination, each shipping
+  the true answer and a plausible fake one.<br>The richest source of blind spots
+  measured here, by rate: on ${pc1(dsn('halueval').silent/dsn('halueval').n)} of its questions all four models agree
+  and are wrong, the highest of the four datasets. It is built to test hallucination,
+  at ${Math.round(dsn('halueval').n/dsn('truthfulqa').n)} times TruthfulQA's size, which is why TruthfulQA no longer has
+  to carry any statistics.`,
+ds_truthfulqa:()=>`<b>TruthfulQA</b> — questions written so that the <i>popular</i> answer
+  is the false one, e.g. "what happens if you crack your knuckles?"<br>The published
+  set has 817. <b>${n0(dsn('truthfulqa').n)} are used here</b>: 437 were written by hunting for questions that
+  fooled GPT-3 specifically, and those are dropped because they would tilt a comparison
+  between model generations; ${n0(ungr())} of the remaining ${n0(dsn('truthfulqa').n+ungr())} have no gradeable answer.<br>Too
+  small to support a statistical claim, and kept for one
+  thing nothing else has:
+  its own human-written taxonomy of <i>why</i> each item is wrong (misconception,
+  conspiracy, superstition, health, politics) — a free outside check on whether
+  this project's own cause labels track anything real.`,
+
+/* slide 6 — the procedure */
+conf:`<b>Confidence</b> is taken from the model's own machinery, not asked for in
+  words: it is built from the probabilities the model assigned to the words it chose.
+  <br>Asking a model "how sure are you?" measures how sure it <i>says</i> it is. This
+  measures something it cannot pose about — and it is the reason the ensemble has to
+  run on providers that expose those probabilities.<br><b>It is kept as a separate
+  signal, not blended into the disagreement score.</b> Added to disagreement as a
+  second feature it improves detection a little — and it is worth having as its own
+  column, because of what it does in the region on the next slide.`,
+disagree:`<b>Disagreement</b>: the four answers are grouped <b>by meaning</b>, not by
+  spelling — so <i>JFK</i> and <i>John F. Kennedy</i> count as one answer, and
+  <i>1962</i> and <i>1963</i> count as two. The score is the share of the four models
+  sitting <b>outside the biggest group</b>.<br>A confidence-weighted version was built
+  and tested and is <b>not</b> used — see the note on slide 9.
+  <span class="mono">0.00 = one group · 0.75 = four different answers</span>`,
+mapping:`Each question is turned into a point using a sentence embedding, then every
+  point is squeezed onto a 2-D map so that questions about similar things
+  land near each other. <b>Only the question text is used</b> — never the answer or
+  whether it was wrong — otherwise the map would be drawing the very clustering it
+  is supposed to reveal.<br>The map was fitted before duplicate questions were
+  removed and was not refitted: each remaining question keeps its position, and a
+  removed twin sat next to its copy (median distance 0.023 map units).`,
+
+/* slide 7 — the funnel */
+f_all:()=>`All ${n0(S.funnel.total)} analysed questions — gradeable, with duplicates removed.
+  Nothing is removed from here on — every bar below is a <b>label</b> on
+  the same set, not a smaller set.`,
+f_any:()=>`At least one of the four models answered wrong: ${pc1(S.funnel.any_wrong/S.funnel.total)} of the corpus, which is
+  what a deliberately hard corpus looks like.`,
+f_maj:`The ensemble's own answer — the answer given by the largest group of
+  models, ties broken by rule — is graded wrong.
+  This is the error rate quoted on the "better models" slide.`,
+f_all4:`Every one of the four wrong. Still not a blind spot: if the four gave
+  <i>different</i> wrong answers, a disagreement check flags the question, and that is
+  most of these.`,
+f_silent:`All four wrong <b>and</b> all four giving the same answer. Disagreement is
+  zero, confidence is high, and every detector built on disagreement reports nothing.
+  <br>This project calls it <b>silent consensus</b> and it is what the tool exists
+  to explore.`,
+f_unan:()=>`The four models produced one meaning between them — grouped by meaning, so
+  differently-worded versions of the same answer count as agreement. ${pc1(S.funnel.unanimous/S.funnel.total)} of the corpus.
+  Agreement is usually right; on ${pc1(S.funnel.silent/S.funnel.unanimous)} of it every model is wrong, and on
+  ${pc1(S.abstain.n_wrong/S.abstain.n)} the
+  ensemble's own answer is wrong — the second figure is larger because a question
+  counts there even if one model's <i>wording</i> happened to be graded correct.
+  <b>${n0(S.funnel.silent)}</b> is the stricter of the two, on purpose.<br><b>And this is where
+  confidence earns its place.</b> In this region disagreement is 0.00 for every
+  question, so it carries <b>no information at all — not by weakness, by
+  definition</b>. Confidence still separates right from wrong here at <b>${f3(S.rq1.agree_auc)}</b>.
+  Not strong, but it is a reading taken where the main signal has nothing to say, and
+  it is only available because these models expose their own probabilities. A
+  black-box detector has nothing here.`,
+
+/* slide 8 — the baseline */
+n8000:()=>`<b>Why a sample and not all ${n0(S.corpus.analysed)}?</b><br>Cost. The competing method has to sample
+  the <i>same</i> model four times over, and it is run on all four models so the claim
+  is "beats the <i>best</i> single model" rather than a convenient one — that is
+  <b>16 answers per question</b> instead of 4. Over the whole corpus it would be
+  ~${n0(Math.round(S.corpus.analysed*16/1000)*1000)} paid generations for a single comparison.<br>So a sample was drawn
+  keeping each dataset's share of the corpus intact, and <b>both methods were scored
+  on exactly the same questions</b> — ${n0(S.baseline.n)} of them once duplicate
+  questions are removed — so the question mix cannot favour either.`,
+scoring:()=>`<b>Measured on the plainer of our two scores, on purpose.</b><br>Disagreement
+  can be scored two ways: <b>head-count</b> (what share of the four models are outside
+  the biggest answer group) or <b>confidence-weighted</b> (the same, but a hesitant
+  dissenter counts for less than a confident one).<br>Weighting was expected to help.
+  It was measured three times and did not: it <b>hurt</b> on the 7–9B models
+  (0.776 vs 0.788) because small models' confidence numbers are not trustworthy, and
+  at full corpus it is worth <b>${sgn(S.signal.overall.auc_weighted-S.signal.overall.auc)}</b> — ${f3(S.signal.overall.auc_weighted)} against ${f3(S.signal.overall.auc)}. So head-count is used
+  <b>everywhere</b>: this comparison, the headline, the confidence experiment's
+  baseline, the tool's colouring and the per-case readout.<br>It also removes the
+  temptation: quoting the weighted score here
+  would make this gap a little larger, and putting the flattering variant next
+  to a competing method is not a position worth defending.`,
+se:`<b>Semantic Entropy</b> (Farquhar et al., Nature 2024) is the published
+  alternative: ask <b>one</b> model the same question four times, group its own four
+  answers by meaning, and measure the spread. It detects a model disagreeing with
+  <i>itself</i>. FaultLines asks four <i>different</i> models once each — same four
+  answers, different source.`,
+pilot300:`The <b>300-question pilot</b> was a small frozen sample used to check the
+  pipeline end to end before paying for the full run.<br>It is not a smaller version
+  of the result: the models were the small 7–9B ones running on a laptop, and the
+  sample is too thin to measure a difference this size.`,
+
+/* slide 8 — where the blind spots are */
+adversarial:`An <b>adversarial benchmark</b> is one written on purpose to trip models
+  up — TruthfulQA baits every question with the popular-but-false answer. The worry
+  was that shared blind spots are just an artefact of that baiting.`,
+
+/* slide 9 — errors get more correlated */
+sameq:()=>`Both ensembles answered the <b>identical ${n0(S.corpus.analysed)} questions</b> and were graded
+  by the identical grader. Nothing is sampled or reweighted, so every number in this
+  table is an exact count, not an estimate.`,
+wrongrate:()=>`The <b>ensemble's own answer</b> — the answer given by the largest
+  group of models — <b>is wrong</b>, counted over all
+  ${n0(S.corpus.analysed)} questions with <b>no filtering whatsoever</b> — this is the raw error rate,
+  measured before anything is selected or excluded.<br>It is high because these
+  benchmarks are chosen to be hard: long-tail Wikipedia entities and questions
+  written to bait a wrong answer. A detector cannot be measured on questions
+  everyone gets right.`,
+blindrate:()=>{const R=S.rq3,[o,n]=R.rates,N=S.corpus.analysed;
+  return `Of <b>all</b> ${n0(N)} questions, the share where every model agreed and
+  every model was wrong.
+  <span class="mono">${n0(R.gen2_silent)} of ${n0(N)} = ${(o.blind*100).toFixed(2)}% ·
+  ${n0(R.gen3_silent)} of ${n0(N)} = ${(n.blind*100).toFixed(2)}%</span>`},
+sharedshare:()=>{const R=S.rq3,[o,n]=R.rates;
+  return `Of the questions the ensemble got <b>wrong</b>, the share that were the
+  silent kind — agreed <i>and</i> wrong.<br>This is the row that matters: the newer
+  models make ${pc(1-n.wrong/o.wrong)} fewer mistakes, but a larger fraction of what is left is
+  invisible to a disagreement check.
+  <span class="mono">2024: ${n0(R.gen2_silent)} ÷ 18,207 wrong answers = ${pc1(o.share)}  ·
+  2025: ${n0(R.gen3_silent)} ÷ ${n0(S.funnel.majority_wrong)} wrong answers = ${pc1(n.share)}</span>`},
+
+/* slide 10 — RQ3 */
+upgrade:`An <b>upgrade</b> here means swapping all four models for the next
+  generation from the <b>same four makers</b> — Meta, Alibaba, Mistral and Google.
+  The questions, the prompts and the grading are identical, and both generations
+  answered the <b>whole</b> corpus, so nothing is sampled or estimated.<br>
+  <span class="mono">2024: Llama-3.1-8B · Qwen2.5-7B · Mistral-7B · Gemma-2-9B
+  → 2025: Llama-4-Maverick · Qwen3-235B · Mistral-Small-3.2 · Gemma-3-27B</span>`,
+emerged:`For most of these the 2024 models also got it wrong — but they <b>disagreed</b>
+  with each other, so a disagreement check would have flagged them. The 2025 models agree.
+  The answer is no more wrong than before; it is now <b>unflagged</b>.`,
+healed:`The 2024 models agreed and were all wrong. The 2025 models disagree, so a
+  check catches them now. The ensemble's own answer is <i>still wrong</i> on most
+  of them, and all four are still wrong on about half — they became visible, not
+  correct.`,
+persisted:`Agreed and wrong in both generations. A year of model improvement did not
+  touch these at all.`,
+detect:`Every count on this slide is about whether an error can be <b>caught</b>, not
+  whether it is right. That is the whole point: most of the newly hidden cases were
+  already wrong in 2024 and simply stopped disagreeing.`,
+
+/* slide 11 — RQ4 */
+obscurity:()=>`The <b>rarest</b> entities in PopQA, ranked by Wikipedia page views —
+  ${n0(cause('obscurity').n)} questions once duplicates are removed — people and places so
+  obscure the models were unlikely ever to have read about them.
+  These are errors of <b>missing knowledge</b>.`,
+misconception:()=>`<b>${cause('misconception').n} TruthfulQA questions</b> where the models gave the popular-but-false
+  answer. These are not gaps in knowledge — the model learnt something, and what it
+  learnt is wrong. <br>n=${cause('misconception').n} is the ceiling TruthfulQA's size allows, and it is a stated
+  limitation, not a choice.`,
+retr:()=>`The same model answers the same question again, this time with the opening
+  paragraphs of the relevant <b>Wikipedia article pasted in above it</b>. Nothing about
+  the model changes; the only difference is that the fact is now on the page in front
+  of it.<br><b>The two arms do not get equally good passages, and that is a stated
+  limitation.</b> Obscure entities are fetched by PopQA's own article title, so the
+  right article is guaranteed and the answer is actually present <b>most</b> of the
+  time — short of all of it, since some facts live only in an infobox. Misconception questions have no such title and get a plain search on the
+  question, whose coverage was never separately measured.<br>So part of the
+  +${Math.round(cause('obscurity').lift*100)}-vs-+${Math.round(cause('misconception').lift*100)} gap could in principle be retrieval quality rather than the kind of
+  error. Result 6 is what answers that: models given a real search engine and left to
+  write their own queries still did not move.`,
+points:()=>{const o=cause('obscurity'),d=Math.round(o.retrieved*100)-Math.round(o.closedbook*100);
+  return `<b>Percentage points</b>, not percent: ${pc(o.closedbook)} → ${pc(o.retrieved)} is a rise of ${d} points.
+  Written this way because "${d}% better" would be read as a ratio.`},
+dissoc:()=>`Two error types, the same fix, wildly different results: <b>+${Math.round(cause('obscurity').lift*100)} points vs
+  +${Math.round(cause('misconception').lift*100)}</b>. That gap is the finding, and it tells an engineer which errors are
+  worth attacking with documents and which are not.`,
+
+/* slide 10 — RQ5, agentic search */
+agentic:`<b>Agentic</b> means the model is in charge, not us. It is told a search tool
+  exists and left to decide whether to use it, what to type, and whether to search
+  again — up to four lookups — before committing to an answer.<br>That is the
+  difference from the previous slide, where the passage was pasted in whether the model
+  wanted it or not. It is also the honest test of "but a real agent would just look it
+  up". Left to decide, a model sometimes skipped the tool entirely.`,
+websearch:`A live search API (Tavily), with its <b>own answer feature switched off</b>
+  on purpose — it will happily return an LLM-written answer to the question, and
+  passing that along would have measured "does a fifth model help", not "does the open
+  web contain the correction". The models get search results, the same as a person
+  would.`,
+arm_wiki:()=>`<b>Arm 1 — the models search Wikipedia.</b> A curated encyclopedia, and
+  stable: the same query returns the same article years from now, so this arm is
+  reproducible.<br><b>Rescued</b> means at least one of the four models got the
+  question right once it could search. Remember these are silent-consensus questions,
+  so all four were wrong <i>without</i> the tool by construction — one model recovering
+  is the weakest possible bar for "the tool helped", and even that bar is cleared only
+  ${pc(S.rq5.wiki_rate)} of the time.`,
+arm_web:`<b>Arm 2 — the models search the open web instead.</b> Same questions, same
+  models, same four-lookup budget; only the source of the results changes.<br>This arm
+  exists because the open web is where shared misconceptions actually <i>come from</i>,
+  which an encyclopedia is not. Running only one of the two would have proved nothing:
+  Wikipedia alone invites "you gave it a weak, narrow source", and the open web alone
+  invites "your results aren't reproducible". <b>The comparison is the finding.</b>`,
+agentgood:`<b>"Maybe the agent was just weak."</b> The likeliest objection to this
+  slide, so it is measured rather than argued — three checks, all on data already on
+  disk.<br><b>1 · The tool worked.</b> Runs that used it were rescued several times as
+  often as runs that ignored it, so "your search was broken" is not available.<br>
+  <b>2 · More of it did not help.</b> In the Wikipedia arm, rescue rates were flat from one lookup to three,
+  and the runs that spent the whole four-lookup budget did <i>worse</i> than the runs
+  that searched once. That is what searching and never finding looks like — not what
+  needing more searches looks like. The 4-lookup ceiling was not the constraint.<br>
+  <b>3 · It was not one bad model.</b> The four makers' rescue rates landed close
+  together — four independent implementations, all in the same place.<br><b>So the claim is
+  not "tools do not help".</b> They plainly do. It is <b>"tools help, and they do not
+  reach these questions."</b>`,
+arm_neither:`<b>The headline.</b> These questions were wrong after the models searched
+  Wikipedia <i>and</i> wrong after they searched the open web — all four models, both
+  times, with their own queries and up to four lookups each.<br>Not "we could not find
+  a source". The models went looking, twice, in two different places, and still
+  produced the same wrong answer they produced with no tool at all.`,
+mcnemar:()=>{const V=S.rq5,I=S.intervals.rq5,pt=v=>(v>=0?'+':'−')+Math.abs(v*100).toFixed(1);
+  return `Both arms ran the <b>same ${V.matched} questions</b>. That restriction matters: the full
+  Wikipedia arm covers ${n0(V.wiki_arm_n)} questions and the web arm ${n0(V.web_arm_n)}, and comparing those two rates
+  directly would have measured which questions were in each sample, not which tool
+  works.<br>Paired difference <b>${pt(I.web_minus_wiki)} points</b>, 95% confidence interval ${pt(I.wd_lo)} to ${pt(I.wd_hi)},
+  McNemar exact <b>p = ${I.wd_p.toFixed(2)}</b> — no detectable difference.<br>What this can and cannot
+  say: an open-web advantage larger than ${(I.wd_hi*100).toFixed(1)} points lies outside the interval;
+  a smaller one is not ruled out. The claim is "no substantial difference", not "identical".`},
+
+/* slide 18 — the three closing numbers */
+end_auc:()=>`<b>${f3(S.signal.overall.auc)}</b> — cross-model disagreement really does predict a wrong answer, at
+  a strength in the same range as published results on other datasets. This half of the
+  thesis is a <b>replication</b>, and it is deliberately not claimed as the
+  contribution.`,
+end_silent:()=>{const A=S.artifact,s=S.signal.overall.silent;
+  return (A&&A.genuine?`<b>${n0(A.genuine)}</b> — of the ${n0(s)} questions where all four
+  models agreed and all four were marked wrong, the ones a blind adjudicator judged
+  genuine${A.undecided?` (${n0(A.undecided)} failed calls are still being re-run)`:''}.`
+  :`<b>${n0(s)}</b> — the questions where all four models agreed and all four were
+  wrong.`)+` Disagreement is zero here, so the score above is silent by construction, and
+  no amount of improving it would help. This is the region the tool is built for.`},
+end_emerged:()=>`<b>${n0(S.rq3.emerged)}</b> — questions a disagreement check would have flagged in 2024 and
+  would miss in 2025, because the newer models stopped disagreeing about them. For
+  ${n0(S.rq3.emerged_was_allwrong)} of the ${n0(S.rq3.emerged)} (${Math.round(100*S.rq3.emerged_was_allwrong/S.rq3.emerged)}%) all four 2024 models were already wrong;
+  the upgrade made them <b>quiet</b>.
+  ${(S.rq3.emerged/S.rq3.persisted).toFixed(1)} times as many as the blind spots inherited from 2024, which is why "wait for better models" is
+  not an answer.`,
+
+/* slide 14 — the record */
+arm:`An <b>arm</b> is one complete experiment: one set of models answering one set of
+  questions under one condition. Two whole arms had to be thrown away — the answers
+  were real, but they could not measure what they were built to measure.`,
+};
+
+const q = k => `<span class="q" data-t="${k}" tabindex="0" role="button"
+  aria-label="what this means">?</span>`;
+
+// Size per model, keyed by the short name export_web.py emits.
+// ACTIVE parameters, not the number in the name: Llama-4-Maverick is called 17B
+// and Qwen3 is called 235B, but both are mixture-of-experts -- only a fraction
+// of the weights run per token. Matching on active parameters is what makes
+// "four makers, comparable models" true; matching on the name would put a 17B
+// next to a 235B and the ensemble would be four sizes, not four makers.
+const PARAMS = {
+  'Llama-4-Maverick':'17B active · 128 experts',
+  'Qwen3-235B':      '22B active · 235B total',
+  'Mistral-Small-3.2':'24B dense',
+  'Gemma-3-27B':     '27B dense',
+  'Llama-3.1-8B':'8B dense', 'Qwen2.5-7B':'7B dense',
+  'Mistral-7B':  '7B dense', 'Gemma-2-9B':'9B dense',
+};
+const modelRow = m => `<span style="display:flex;justify-content:space-between;gap:16px">
+  <span>${m}</span><span class="muted" style="font-size:.86em">${PARAMS[m]||''}</span></span>`;
+// ─────────────────────────────────────────────────────────────────────────────
+
+function bar(label,val,max,colour,text,hi){
+  return `<div class="bar${hi?' hi':''}"><div class="lb">${label}</div>
+    <div class="tr"><div class="fl" data-w="${Math.max(1,val/max*100)}"
+      style="background:${colour}"></div></div>
+    <div class="vl">${text}</div></div>`;
+}
+
+// Rows taper from a shared centre line, and the gap between two rows is filled
+// with a trapezoid joining one width to the next -- so the eye reads the whole
+// thing as one narrowing channel instead of five separate bars.
+//
+// Every row is emitted as exactly three grid cells (label · shape · value), and
+// each wall as three cells too (empty · wall · empty). Keeping that rhythm is
+// what lets plain auto-placement do the layout: one explicitly-placed item
+// would push every following cell one column out of line.
+function funnel(rows){
+  const max=rows[0].val, w=r=>Math.max(1.2,r.val/max*100);
+  return `<div class="fn">${rows.map((r,i)=>{
+    const a=w(r), nx=rows[i+1];
+    const row=`<div class="lb${r.hi?' on':''}">${r.label}</div>
+      <div class="seg" style="width:${a}%;background:${r.colour}"></div>
+      <div class="vl">${r.text}</div>`;
+    if(!nx) return row;
+    // outer edges of this row and the next, as percentages of the same column
+    const l1=(100-a)/2, l2=(100-w(nx))/2;
+    return row+`<div></div><div class="nk" style="background:${r.colour};
+      opacity:.3;clip-path:polygon(${l1}% 0,${100-l1}% 0,${100-l2}% 100%,${l2}% 100%)"
+      ></div><div></div>`;
+  }).join('')}</div>`;
+}
+
+function slides(){
+  if(!S) return [`<div class="slide"><h2>summary.json not found</h2>
+    <p>Run <span class="mono teal">python scripts/export_web.py</span> from the project root,
+    then serve this folder over HTTP (<span class="mono">python -m http.server</span>).</p></div>`];
+
+  const sig=S.signal, ov=sig.overall, R=S.rq3, C=S.corpus, B=S.baseline;
+  const bestSingle=B.single_model[0];
+  const obsc=S.rq4.by_cause.find(c=>c.cause==='obscurity');
+  const misc=S.rq4.by_cause.find(c=>c.cause==='misconception');
+  const dsBig=[...sig.by_dataset].sort((a,b)=>b.silent-a.silent);
+  // Every dataset number on the corpus slide comes from here, so it is the
+  // measured corpus and not the 60-question probe that chose the datasets.
+  // `base` is the ensemble's majority-wrong rate on that dataset.
+  const D=Object.fromEntries(sig.by_dataset.map(d=>[d.dataset,d]));
+  const F=S.funnel, V=S.rq5, A=S.abstain;
+
+  // Built HERE, not in TIPS, because TIPS is module-scope and cannot see S.
+  // Every figure is derived from summary.json -- nothing about this table is
+  // typed as a literal, which is the whole lesson of ISSUES #43.
+  const pcA=v=>(v*100).toFixed(1)+'%';
+  // RQ3 tips, rebuilt from the data. The module-scope versions above are the
+  // number-free fallback; these replace them once summary.json has loaded.
+  const R3=S.rq3;
+  if(R3&&R3.emerged&&R3.emerged_was_allwrong!=null){
+    TIPS.emerged=`For most of these — <b>${n0(R3.emerged_was_allwrong)} of
+      ${n0(R3.emerged)}</b> (${pcA(R3.emerged_was_allwrong/R3.emerged)}) — the 2024
+      models also all got it wrong, but they <b>disagreed</b> with each other, so a
+      disagreement check would have flagged them. The 2025 models agree. The answer
+      is no more wrong than before; it is now <b>unflagged</b>.`;
+    TIPS.detect=`Every count on this slide is about whether an error can be <b>caught</b>, not
+      whether it is right. That is the whole point:
+      ${pcA(R3.emerged_was_allwrong/R3.emerged)} of the newly hidden cases were
+      already wrong in 2024 and simply stopped disagreeing.`;
+  }
+  if(R3&&R3.healed&&R3.healed_ens_wrong!=null&&R3.healed_allwrong!=null){
+    TIPS.healed=`The 2024 models agreed and were all wrong. The 2025 models now disagree on almost all of them, so a
+      check catches them now. But the 2025 ensemble's own answer is <i>still wrong</i>
+      on <b>${pcA(R3.healed_ens_wrong/R3.healed)}</b> of them
+      (${n0(R3.healed_ens_wrong)} of ${n0(R3.healed)}), and all four are still wrong on
+      ${pcA(R3.healed_allwrong/R3.healed)} — they became visible, not correct.`;
+  }
+  TIPS.abstain=`<b>"Just make it say <i>I don't know</i> when it isn't sure."</b>
+    The most common suggestion this project gets, so it is measured rather than
+    argued. Refuse every answer below a confidence threshold, on the
+    ${n0(A.n)} questions where all four models agreed — the region where this is
+    the <i>only</i> proposal available, so it gets its fairest hearing.<br><br>
+    <table style="width:100%;font-size:12.5px;border-collapse:collapse">
+    <tr><th align="left">refuse below</th><th align="right">errors caught</th>
+        <th align="right">correct answers destroyed</th></tr>
+    ${A.curve.map(c=>`<tr><td class="mono">${c.t.toFixed(2)}</td>
+      <td align="right" class="mono">${pcA(c.caught)}</td>
+      <td align="right" class="mono">${pcA(c.lost)}</td></tr>`).join('')}
+    </table><br>
+    ${A.targets.map(t=>`Catch <b>${(t.target*100)|0}%</b> of the errors →
+       destroy <b>${pcA(t.lost)}</b> of the correct answers.`).join('<br>')}
+    <br><br><b>Why.</b> Confidence is <i>exp(mean log p)</i> — how unsurprised the
+    model was by its own words. Fluency, not truth. Here it averages
+    <b>${A.conf_right}</b> when right and <b>${A.conf_wrong}</b> when wrong.
+    There is no threshold that fits inside a gap that size, which is the same
+    fact RQ1 reports as AUC ${f3(S.rq1.agree_auc)}.`;
+
+  return [
+
+  /* 1 ─ title */
+  `<div class="slide">
+    <div class="eyebrow">M.S. Data Science &amp; AI · San Francisco State University · VI-Lab</div>
+    <h1><span class="grad">FaultLines</span></h1>
+    <p class="big" style="margin-top:18px">A visual-analytics tool for the place where
+      asking several language models <em>stops working</em>: when they all agree,
+      and all of them are wrong.</p>
+    <div class="stats" style="margin-top:22px">
+      <div class="st"><b>${n0(C.analysed)}</b><span>questions${q('questions')}</span></div>
+      <div class="st"><b>${(C.generations/1000).toFixed(0)}k</b><span>answers graded${q('graded')}</span></div>
+      <div class="st"><b class="teal">${f3(ov.auc)}</b><span>AUC${q('auc')}</span></div>
+      <div class="st"><b class="red">${n0(ov.silent)}</b><span>blind spots found${q('silent')}</span></div>
+    </div>
+  </div>`,
+
+  /* 2 ─ the premise */
+  `<div class="slide">
+    <div class="eyebrow">the published idea</div>
+    <h2>“If the models disagree, one of them is probably wrong.”</h2>
+    <p class="big">So ask several models the same question. Measure how much they
+      differ. Use that as a warning light for hallucination.</p>
+    <p class="lede">It works, and it is already published. Farquhar <i>et al.</i>
+      (<i>Nature</i>, 2024) report a detection score of <b>AUROC 0.790</b>${q('auroc')}
+      for one model disagreeing with itself; Gorbett &amp; Jana (2026) report
+      <b>AUROC 0.727</b> for the cross-model version, both on other datasets and so not
+      directly comparable. This project reproduces the
+      same measure at <b class="teal">AUROC ${f3(ov.auc)}</b> on ${n0(C.analysed)}
+      questions — so the signal is <em>not</em> the contribution.</p>
+  </div>`,
+
+  /* 3 ─ the gap */
+  `<div class="slide">
+    <div class="eyebrow">the gap disagreement detectors do not measure</div>
+    <h2>What if they all agree — and they are all <span class="red">wrong</span>?</h2>
+    <div class="cols" style="margin-top:6px">
+      <div>
+        <p>Disagreement can only warn you about errors that <b>show up as a
+          disagreement</b>. A shared mistake produces perfect consensus and a
+          confident, quiet, wrong answer.</p>
+        <p class="lede">Every detector built on disagreement is blind here — by
+          construction, not by accident. This project calls these cases
+          <b class="violet">silent consensus</b> (blind spots) and builds the view that finds them.</p>
+      </div>
+      <div>
+        <div class="muted mono" style="font-size:12px;margin-bottom:8px">
+          Who served as a Major General in the war of 1939–1945?</div>
+        <div class="quad">
+          <div class="mbox"><div class="mn">Llama-4-Maverick</div><div class="ma red">Eisenhower</div></div>
+          <div class="mbox"><div class="mn">Qwen3-235B</div><div class="ma red">Eisenhower</div></div>
+          <div class="mbox"><div class="mn">Mistral-Small-3.2</div><div class="ma red">Eisenhower</div></div>
+          <div class="mbox"><div class="mn">Gemma-3-27B</div><div class="ma red">Eisenhower</div></div>
+        </div>
+        <p class="mono" style="font-size:12.5px;margin-top:10px">
+          disagreement <b>0.00</b> · mean confidence <b>0.97</b><br>
+          correct answer <b class="green">Carroll W. McColpin</b></p>
+      </div>
+    </div>
+  </div>`,
+
+  /* 3b ─ the measurement that turns the gap into a finding.
+     Added 2026-08-25. The deck had slide 3 asking "what if they all agree and
+     are all wrong", and then went straight to what was built -- so the premise
+     the whole heuristic rests on was never tested on screen. It is claim 12 in
+     RESULTS.md and it is the abstract of the paper. Every figure here comes
+     from S.independence, which the exporter computes (ISSUES #54: a number with
+     no source is worse than a stale one).
+     2026-09-27 (ISSUES #68): the slide now LEADS with the stratified figure --
+     observed vs expected all-wrong counts summed within each dataset. The
+     pooled ratio multiplied error rates averaged over datasets whose difficulty
+     differs several-fold, and pooling alone manufactures co-failure. It is kept,
+     below, and labelled as the weaker number. */
+  ((I)=>{const T=I.stratified, K=S.intervals&&S.intervals.concordance;
+    if(!T) return '';
+    return `<div class="slide">
+    <div class="eyebrow">the premise, measured</div>
+    <h2>Four developers is supposed to mean four independent brains.
+      <span class="red">It does not.</span></h2>
+    <p class="lede">Within each dataset, multiply the four models' error rates to get
+      how often independence says all four should be wrong at once, and add the
+      datasets up. The four are wrong together
+      <b class="red">${T.ratio.toFixed(1)}×</b> as often as that${K?` <span class="muted">(95% CI
+      ${K.lo.toFixed(2)}–${K.hi.toFixed(2)})</span>`:''}.</p>
+    <div class="bars" style="margin-top:14px">
+      <div class="bar">
+        <div class="lb">predicted, if independent</div>
+        <div class="tr"><div class="fl" data-w="${(T.expected/T.observed*100).toFixed(1)}"
+          style="background:var(--ink3)"></div></div>
+        <div class="vl">${n0(Math.round(T.expected))}</div>
+      </div>
+      <div class="bar hi">
+        <div class="lb">observed — all four wrong</div>
+        <div class="tr"><div class="fl" data-w="100" style="background:var(--red)"></div></div>
+        <div class="vl">${n0(T.observed)}</div>
+      </div>
+      <div class="bar">
+        <div class="lb">…and <em>identical</em>, so undetectable</div>
+        <div class="tr"><div class="fl" data-w="${(ov.silent/T.observed*100).toFixed(1)}"
+          style="background:var(--violet)"></div></div>
+        <div class="vl">${n0(ov.silent)}</div>
+      </div>
+    </div>
+    <div class="cols" style="margin-top:6px">
+      <div>
+        <p>Within each dataset the mean pairwise error correlation is
+          <b class="red">φ = ${T.phi_min.toFixed(2)}–${T.phi_max.toFixed(2)}</b>, where
+          independence would be 0. One plausible reason, not tested here: they learned
+          from much of the same web.</p>
+      </div>
+      <div>
+        <p><b>The third bar is the thesis.</b> Wrong together is survivable —
+          four models can be wrong four <em>different</em> ways, and then they
+          disagree and the detector fires. Wrong <b>and unanimous</b> is the
+          case the warning light cannot see.</p>
+      </div>
+    </div>
+    <p class="lede" style="font-size:13.5px;margin-top:4px"><b>Pooled over the whole
+      corpus the figure is larger</b> — all four wrong on ${pc1(I.all_wrong)} against
+      ${pc1(I.all_wrong_if_independent)} predicted, ${I.ratio.toFixed(1)}×, φ
+      ${I.phi_mean.toFixed(3)} — and it is the weaker number: it multiplies error rates
+      averaged over datasets whose difficulty differs several-fold, and that alone
+      manufactures co-failure. Quote the within-dataset figure.</p>
+    <p class="mono muted" style="font-size:12px;margin-top:2px">
+      by dataset: ${T.by_dataset.map(d=>`${d.dataset} ${d.ratio.toFixed(1)}×`).join('  ·  ')}
+    </p>
+  </div>`})(S.independence),
+
+  /* 4 ─ what was built */
+  `<div class="slide">
+    <div class="eyebrow">what was built</div>
+    <h2>Four model families, one corpus, every answer graded</h2>
+    <div class="cols">
+      <div>
+        <table>
+          <tr><td class="k">questions asked${q('asked')}</td><td class="mono"><b>${n0(C.asked)}</b></td></tr>
+          <tr><td class="k">duplicate questions removed</td><td class="mono">${n0(C.duplicates)}</td></tr>
+          <tr><td class="k">analysed <span class="muted">(gradeable, unique)</span>${q('analysed')}</td><td class="mono"><b>${n0(C.analysed)}</b></td></tr>
+          <tr><td class="k">answers analysed${q('gens')}</td><td class="mono"><b>${n0(C.generations)}</b></td></tr>
+          <tr><td class="k">failed generations${q('fails')}</td><td class="mono green"><b>0</b></td></tr>
+          <tr><td class="k">datasets${q('ds4')}</td><td class="mono">4</td></tr>
+        </table>
+        <p class="lede" style="margin-top:12px;font-size:14px">
+          ${n0(ungr())} are TruthfulQA items whose reference answer is
+          literally <i>“I have no comment”</i> — no correctness label exists,
+          so grading them would invent one. The other ${n0(C.duplicates)} were the
+          <b>same question twice</b>: every earlier check worked on question ids,
+          which are unique by construction. Unique ids are not unique questions.</p>
+      </div>
+      <div>
+        <div class="card">
+          <h3 style="font-size:16px">2025 ensemble${q('active')}</h3>
+          <p class="mono" style="font-size:clamp(14px,1.35vw,18px);line-height:1.7;
+            margin:0;color:var(--ink)">${C.models_new.map(modelRow).join('')}</p>
+          <h3 style="font-size:16px;margin-top:18px">2024 ensemble <span class="muted">— for comparison</span></h3>
+          <p class="mono" style="font-size:clamp(14px,1.35vw,18px);line-height:1.7;
+            margin:0;color:var(--ink2)">${C.models_old.map(modelRow).join('')}</p>
+        </div>
+        <p class="lede" style="font-size:14px;margin-top:12px">
+          Four different <em>makers</em>, not four sizes of one model — otherwise
+          shared training data guarantees shared errors and the comparison means nothing.</p>
+      </div>
+    </div>
+  </div>`,
+
+  /* 5 ─ the datasets.  Added 2026-08-03: the deck went straight from "what was
+     built" to results, so a reviewer met popqa/halueval for the first time as
+     bar labels on a findings slide with no idea what they were. */
+  `<div class="slide">
+    <div class="eyebrow">the questions themselves</div>
+    <h2>Four benchmarks, picked for how <em>hard</em> they are</h2>
+    <div class="cols" style="gap:14px">
+      <div>
+        <div class="card" style="margin-bottom:10px">
+          <div class="dsn">PopQA<span>${n0(D.popqa.n)} questions · ${pc(D.popqa.base)} wrong</span>${q('ds_popqa')}</div>
+          <p class="lede" style="margin:0;font-size:15px">Wikipedia entities running
+            from household names down to almost nobody, each tagged with how many
+            people actually view its page. <b>The obscurity end.</b></p>
+        </div>
+        <div class="card">
+          <div class="dsn">HaluEval<span>${n0(D.halueval.n)} questions · ${pc(D.halueval.base)} wrong</span>${q('ds_halueval')}</div>
+          <p class="lede" style="margin:0;font-size:15px">Built to catch hallucination:
+            every question ships the true answer <i>and</i> a convincing fake.
+            <b>The richest source of blind spots we measured, by rate.</b></p>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:10px">
+          <div class="dsn">TriviaQA<span>${n0(D.triviaqa.n)} questions · ${pc(D.triviaqa.base)} wrong</span>${q('ds_triviaqa')}</div>
+          <p class="lede" style="margin:0;font-size:15px">Ordinary trivia, asked with
+            no reference text. <b>The easy end</b> — and that is its job: a detector
+            score needs questions the models get <em>right</em> too.</p>
+        </div>
+        <div class="card">
+          <div class="dsn">TruthfulQA<span>${n0(D.truthfulqa.n)} questions · ${pc(D.truthfulqa.base)} wrong</span>${q('ds_truthfulqa')}</div>
+          <p class="lede" style="margin:0;font-size:15px">Questions where the
+            <em>popular</em> answer is the false one. Too small to carry statistics —
+            kept for its human-written list of <b>why</b> each item fools people.</p>
+        </div>
+      </div>
+    </div>
+    <p class="lede" style="margin-top:14px">The ensemble gets <b>${pc(D.triviaqa.base)}</b>
+      of TriviaQA wrong and <b>${pc(D.popqa.base)}</b> of PopQA. That spread is the
+      whole reason for using four: a warning light can only be scored on a corpus that
+      contains both errors to catch <em>and</em> correct answers to leave alone, and no
+      single benchmark supplies both. The detection signal and the error correlation hold in all four.</p>
+  </div>`,
+
+  /* 6 ─ the procedure.  The bridge from "what was built" to "what was found". */
+  `<div class="slide">
+    <div class="eyebrow">what was actually done with them</div>
+    <h2>Ask four models the same question. Then study what they did <em>together</em>.</h2>
+    <div class="flow">
+      <div class="fstep"><i>1</i><div><b>Ask</b>
+        <p>Every question goes to all four models, once each, same prompt, no
+          reference text — ${n0(C.generations)} answers.</p></div></div>
+      <div class="fstep"><i>2</i><div><b>Grade</b>${q('analysed')}
+        <p>Each answer marked right or wrong against the benchmark's own reference
+          answer — exact match, then aliases, then a meaning check.</p></div></div>
+      <div class="fstep"><i>3</i><div><b>Score two things per question</b>
+        <p>How confident each model was${q('conf')} · how far apart the four answers
+          were, grouped by meaning rather than wording${q('disagree')}.</p></div></div>
+      <div class="fstep"><i>4</i><div><b>Keep the silent ones</b>
+        <p>The questions where disagreement is <b>zero</b> and every one of the four
+          answers is <b>wrong</b> — <b class="red">${n0(ov.silent)}</b> of them.</p></div></div>
+      <div class="fstep"><i>5</i><div><b>Put them on a map</b>${q('mapping')}
+        <p>All ${n0(C.analysed)} questions placed by what they are about, so you can
+          see whether the blind spots cluster or scatter.</p></div></div>
+    </div>
+    <p class="lede" style="margin-top:12px">Everything after this — every result
+      and all five views of the tool — is a question asked of that one table.</p>
+  </div>`,
+
+  /* 7 ─ the funnel.  Added 2026-08-03: step 4 of the procedure said "keep the
+     silent ones" and then 1,054 appeared on four later slides with nothing
+     showing where it came from or how much of the corpus it is. */
+  `<div class="slide">
+    <div class="eyebrow">how the ${n0(F.silent)} are isolated</div>
+    <h2>Not every error is a blind spot. These are the ones a check <em>cannot see</em>.</h2>
+    ${funnel([
+      {label:'every question'+q('f_all'),val:F.total,colour:'#2a3566',text:n0(F.total)},
+      {label:'at least one wrong'+q('f_any'),val:F.any_wrong,colour:'#3a4472',text:n0(F.any_wrong)},
+      {label:'the ensemble\'s answer wrong'+q('f_maj'),val:F.majority_wrong,colour:'#4a5490',text:n0(F.majority_wrong)},
+      {label:'all four wrong'+q('f_all4'),val:F.all_wrong,colour:'#8b5cf6',text:n0(F.all_wrong)},
+      {label:'all four wrong <b>and all four agreed</b>'+q('f_silent'),val:F.silent,
+       colour:'linear-gradient(90deg,#f87171,#f472b6)',text:n0(F.silent),hi:true}])}
+    <p class="big"><b class="red">${n0(F.silent)}</b> questions —
+      <b>${pc1(F.silent/F.total)}</b> of the corpus, and
+      <b>${pc1(F.silent/F.all_wrong)}</b> of the questions every model got wrong.</p>
+    <p class="lede"><b>Nothing is thrown away here.</b> All ${n0(F.total)} questions stay
+      in the corpus, in the map and in the detection score — this is a <em>definition</em>,
+      not a filter. Read it the other way and it says the same thing: the four models
+      agreed on ${n0(F.unanimous)} questions${q('f_unan')}, and on
+      <b>${pc1(F.silent/F.unanimous)}</b> of those <b>every model was wrong</b>.</p>
+    <p class="lede" style="font-size:14px"><b>"So just make it say <em>I don't
+      know</em> when confidence is low."</b>${q('abstain')} Measured, not argued.
+      In this region a threshold that catches
+      <b>${(A.targets[1].target*100)|0}%</b> of the errors also destroys
+      <b>${(A.targets[1].lost*100).toFixed(0)}%</b> of the correct answers —
+      confidence averages ${A.conf_right} when right and ${A.conf_wrong} when
+      wrong, and no line fits inside that.</p>
+  </div>`,
+
+  /* 8 ─ result: signal + baseline */
+  `<div class="slide">
+    <div class="eyebrow">result 1 — the signal reproduces, and beats the alternative</div>
+    <h2>Asking four models beats asking one model four times</h2>
+    <div class="bars" style="margin-top:10px">
+      ${bar('four models','1','1','linear-gradient(90deg,#2dd4bf,#60a5fa)',f3(B.cross_model_same_qids),true)
+        .replace('data-w="100"','data-w="'+(B.cross_model_same_qids/0.9*100)+'"')}
+      ${B.single_model.map(m=>bar(m.model+' alone',m.auc,0.9,'#3a4472',f3(m.auc))).join('')}
+    </div>
+    <p class="lede">Same <b>${n0(B.n)} questions</b>${q('n8000')} in both arms, same
+      generation budget — the only difference is whether the four answers come from
+      one model asked four times${q('se')} or four models asked once.
+      <b>+${(B.cross_model_same_qids-bestSingle.auc).toFixed(3)}</b> over the best single
+      model${q('scoring')}.</p>
+    <p class="lede" style="font-size:15px">On the <b>300-question pilot</b>${q('pilot300')}
+      single-model <em>won</em>, 0.813 to 0.788 — the opposite result, from the same code.
+      Effects measured on 300 questions have come out smaller or absent at full scale
+      <b>five times out of five</b> in this project, which is why the pilot is treated
+      as a test of the pipeline and never as a preview of the answer.</p>
+  </div>`,
+
+  /* 6 ─ result: blind spots real, and not where expected */
+  `<div class="slide">
+    <div class="eyebrow">result 2 (RQ1) — the blind spot is real, and it is not where we predicted</div>
+    <h2><span class="red">${n0(ov.silent)}</span> questions where every model
+      agreed and every model was wrong</h2>
+    <div class="bars">
+      ${dsBig.map(d=>bar(d.dataset+q('ds_'+d.dataset),d.silent,dsBig[0].silent,
+        d.dataset==='truthfulqa'?'#fbbf24':'#f87171',n0(d.silent))).join('')}
+    </div>
+    <p class="big">The proposal expected these to cluster in TruthfulQA — the dataset
+      built from human misconceptions. <b class="amber">${pc1(1-sig.by_dataset
+        .find(d=>d.dataset==='truthfulqa').silent/ov.silent)} of them are somewhere
+      else.</b></p>
+    ${S.artifact?`<p class="lede" style="font-size:14px">These are the grader's counts. About a fifth
+      (${pc1(S.artifact.rate)}) turn out to be answer-key errors, not model errors, which
+      leaves <b>${n0(S.artifact.genuine)}</b> real shared mistakes (slide 18).</p>`:''}
+    <p class="lede">In plain terms: we thought the models only failed together on
+      <b>trick questions</b>${q('adversarial')} — the ones written to catch people out.
+      They don't. Almost all shared mistakes are on ordinary trivia and everyday
+      Wikipedia facts. So this is <b>something the ensemble does</b>, not something one
+      nasty test set does to it — which means the tool is for any corpus, not just
+      adversarial ones.</p>
+  </div>`,
+
+  /* 7 ─ result: better models, more correlated errors */
+  `<div class="slide">
+    <div class="eyebrow">result 3 (RQ3) — the uncomfortable one</div>
+    <h2>The newer models make fewer mistakes. A <em>larger share</em> of what is left is shared.</h2>
+    ${(()=>{const [o,n]=S.rq3.rates;   // [2024, 2025] — exporter fixes the order
+      return `<table style="margin:4px 0 14px">
+      <tr><th>on the same ${n0(C.analysed)} questions${q('sameq')}</th><th>2024 models</th><th>2025 models</th></tr>
+      <tr><td class="k">ensemble answered wrong${q('wrongrate')}</td>
+          <td class="mono">${pc1(o.wrong)}</td><td class="mono green">${pc1(n.wrong)}</td></tr>
+      <tr><td class="k">shared blind-spot rate${q('blindrate')}</td>
+          <td class="mono">${(o.blind*100).toFixed(2)}%</td>
+          <td class="mono">${(n.blind*100).toFixed(2)}%</td></tr>
+      <tr><td colspan="3" class="muted" style="font-size:12px;text-align:left">grader's count · after
+          re-checking answer keys the rise in this row is not significant (slide 19)</td></tr>
+      <tr><td class="k"><b>share of errors that are SHARED</b>${q('sharedshare')}</td>
+          <td class="mono">${pc1(o.share)}</td>
+          <td class="mono red"><b>${pc1(n.share)}</b></td></tr>
+    </table>`})()}
+    <p class="big">The newer, larger models fix many mistakes, and a larger share of what
+      remains falls in the region disagreement cannot see.
+      <span class="muted" style="font-size:.7em">(one generation pair; size and
+      generation are not separated)</span></p>
+    <p class="lede">This is the safety argument: in the one upgrade measured here, a larger share of
+      the remaining mistakes is the kind a disagreement check cannot see.</p>
+    <p class="lede" style="font-size:14px"><b>Why is the error rate so high?</b>
+      Because these benchmarks are chosen to be hard — obscure Wikipedia entities and
+      questions written to bait a wrong answer. Nothing is filtered out first; these
+      are raw rates over all ${n0(C.analysed)} questions. A warning light can only be
+      measured where there are errors to warn about.</p>
+  </div>`,
+
+  /* 7b ─ the ablation, and what actually drives the blind region.
+     Added 2026-08-25. Slide 7 says the shared share rises as models improve.
+     The obvious reviewer question is "rises according to WHAT?", and until this
+     week the project had no answer. It does now, and the answer is correlation
+     rather than capability -- which is the constructive half of slide 3b.
+     Every figure reads S.ablation, written by scripts/ensemble_ablation.py. */
+  ((A)=>!A||!A.by_size_2025?'':`<div class="slide">
+    <div class="eyebrow">result 3b — what the blind region is made of</div>
+    <h2>It tracks how <span class="red">correlated</span> the models are.
+      Not how good they are.</h2>
+    <p class="lede">Eight models have answered the identical corpus, so every
+      subset of two, three or four of them is an ensemble that could have been deployed.
+      <b>${A.n_ensembles} of them</b>, each fully re-clustered by meaning, no new
+      generations, nothing spent.</p>
+    <div class="cols" style="margin-top:8px">
+      <div>
+        <table>
+          <tr><th style="text-align:left">ensemble size</th><th>blind-spot rate</th><th>range</th></tr>
+          ${[...A.by_size_2025].reverse().map(r=>`<tr>
+            <td class="k" style="text-align:left">${r.k} models${r.k===4?' <span class="muted">— the headline</span>':''}</td>
+            <td class="mono${r.k===4?' amber':''}">${(r.silent*100).toFixed(2)}%</td>
+            <td class="mono muted">${r.n>1?`${(r.lo*100).toFixed(2)}–${(r.hi*100).toFixed(2)}%`:'—'}</td></tr>`).join('')}
+        </table>
+        <p class="lede" style="font-size:14px;margin-top:8px">2025 models only, so no
+          generation is mixed in. <b>Never quote the headline rate without this
+          curve</b> — dropping one model of four raises the blind region by
+          ${(()=>{const b=k=>A.by_size_2025.find(r=>r.k===k);
+            return b(3)&&b(4)?pc(b(3).silent/b(4).silent-1):'a large share'})()}.</p>
+      </div>
+      <div>
+        <table>
+          <tr><th style="text-align:left">within each size</th>${A.phi_silent.map(r=>`<th>k=${r.k}</th>`).join('')}</tr>
+          <tr><td class="k" style="text-align:left">error <b>correlation</b> → blind rate</td>
+            ${A.phi_silent.map(r=>`<td class="mono red"><b>${r.r>0?'+':''}${r.r.toFixed(2)}</b></td>`).join('')}</tr>
+          <tr><td class="k" style="text-align:left">error <b>rate</b> → blind rate</td>
+            ${A.err_silent.map(r=>`<td class="mono muted">${r.r>0?'+':''}${r.r.toFixed(2)}</td>`).join('')}</tr>
+        </table>
+        <p class="big" style="margin-top:10px">You cannot buy your way out with
+          better models. A less correlated ensemble has a smaller blind region,
+          and correlation is measurable before you deploy.</p>
+      </div>
+    </div>
+    <p class="lede" style="font-size:14px">And the trade is not free, which is the
+      opposite of what I predicted: correlation also tracks detection AUC
+      (${A.phi_auc.map(r=>`k=${r.k} ${r.r>0?'+':''}${r.r.toFixed(2)}`).join(' · ')}),
+      so decorrelating shrinks the region the detector cannot see while weakening
+      it over the region it can. Second falsified prediction in this project.</p>
+  </div>`)(S.ablation),
+
+  /* 7c ─ RQ1b. Added 2026-08-25. The deck's answer to "just make it say I
+     don't know" was an abstention table showing no threshold works. True, and
+     it was only ever about ONE feature. */
+  ((R)=>!R||!R.best_auc?'':`<div class="slide">
+    <div class="eyebrow">result 2b (RQ1) — the region the vote cannot see</div>
+    <h2>The vote is blind there. The <span class="teal">record</span> is not.</h2>
+    <p class="lede">On the ${n0(S.rq1.agree_n)} questions where all four models agreed,
+      disagreement is 0 by construction. Confidence was the only thing this project had
+      looked at, and it reaches AUC ${f3(R.conf_auc)} — real, and useless as a gate.
+      Every other column of the record, combined: <b class="teal">${f3(R.best_auc)}</b>.</p>
+    <div class="stats">
+      <div class="st"><b class="red">${pc1(R.base)}</b><span>wrong, if you answer everything</span></div>
+      <div class="st"><b>${pc1(R.conf_risk50)}</b><span>keeping half, on confidence</span></div>
+      <div class="st"><b class="teal">${pc1(R.best_risk50)}</b><span>keeping half, on the record</span></div>
+      <div class="st"><b class="teal">${pc1(R.best_risk25)}</b><span>keeping the surest quarter</span></div>
+    </div>
+    <p class="big" style="margin-top:14px">This is the first direct test of the
+      project's design claim — that keeping the whole record, rather than just the
+      score, is what makes the findings possible.</p>
+    <p class="lede" style="font-size:14px">Out-of-fold, and audited for leakage before
+      it was believed: the first version had a leak (test-fold labels reached a
+      neighbourhood feature used in training), and the first fix was half a fix.
+      A third: duplicate questions sat on both sides of a fold, inflating the earlier
+      published 0.811 until folds were grouped by question text.
+      All three were corrected. It does not rescue
+      the blind region as a class — it ranks within it — and it needs a labelled
+      corpus to place a new question against.</p>
+  </div>`)(S.rq1b),
+
+  /* 8 ─ RQ3 */
+  `<div class="slide">
+    <div class="eyebrow">result 4 (RQ3) — what happens when you upgrade the models</div>
+    <h2>An upgrade${q('upgrade')} <span class="amber">hides</span> blind spots
+      about twice as often as it inherits them</h2>
+    <div class="bars">
+      ${bar('newly hidden'+q('emerged')+' <span class="muted">a check would have flagged it in 2024, not in 2025</span>',R.emerged,R.emerged,'#fbbf24',n0(R.emerged),true)}
+      ${bar('now visible'+q('healed')+' <span class="muted">they disagree again</span>',R.healed,R.emerged,'#34d399',n0(R.healed))}
+      ${bar('hidden in both'+q('persisted')+' <span class="muted">agreed and wrong, both years</span>',R.persisted,R.emerged,'#f87171',n0(R.persisted),true)}
+    </div>
+    <div class="cols" style="margin-top:8px">
+      <div><p><b>${pc(R.persistence)}</b> of the 2024 models' blind spots survive the
+        upgrade <span class="muted">(${R.persisted} of ${R.gen2_silent})</span>.</p></div>
+      <div><p><b>${pc(R.inherited)}</b> of the 2025 models' blind spots were already
+        blind in 2024 <span class="muted">(${R.persisted} of ${R.gen3_silent})</span>.</p></div>
+    </div>
+    <p class="lede" style="font-size:14px"><b>The axis is detectability, not
+      correctness.</b>${q('detect')} ${pc(R.emerged_was_allwrong/R.emerged)} of the newly hidden were already wrong in 2024 — they
+      simply <em>disagreed</em>, so a check could catch them. Both arms cover the
+      identical corpus, so every count is exact — no sampling, no reweighting.</p>
+  </div>`,
+
+  /* 9 ─ RQ4 */
+  `<div class="slide">
+    <div class="eyebrow">result 5 (RQ4) — so can you fix it?</div>
+    <h2>Retrieval repairs ignorance. It barely touches a <em>belief</em>.</h2>
+    <div class="bars">
+      ${bar('obscure entities'+q('obscurity')+' <span class="muted">n='+obsc.n+'</span>',
+            obsc.closedbook,1,'#3a4472',pc(obsc.closedbook))}
+      ${bar('&nbsp;&nbsp;+ documents'+q('retr'),obsc.retrieved,1,'linear-gradient(90deg,#34d399,#2dd4bf)',
+            pc(obsc.retrieved),true)}
+      ${bar('misconceptions'+q('misconception')+' <span class="muted">n='+misc.n+'</span>',
+            misc.closedbook,1,'#3a4472',pc(misc.closedbook))}
+      ${bar('&nbsp;&nbsp;+ documents'+q('retr'),misc.retrieved,1,'linear-gradient(90deg,#fbbf24,#f472b6)',
+            pc(misc.retrieved),true)}
+    </div>
+    <p class="big">Missing knowledge: <b class="green">+${Math.round(obsc.lift*100)} points</b>${q('points')}.
+      Absorbed misconception: <b class="amber">+${Math.round(misc.lift*100)}</b>.</p>
+    <p class="lede">If the model simply never knew a fact, handing it the page fixes
+      the answer. If the model <em>learnt something false</em>, it mostly does not —
+      and the misconception gain is small enough (p = 0.077) that it may be no gain
+      at all. A <b>${(obsc.lift/misc.lift).toFixed(1)}×</b> gap${q('dissoc')}, and
+      it tells an engineer which errors are worth attacking with documents and
+      which need something else entirely.</p>
+  </div>`,
+
+  /* 10 ─ RQ5.  Added 2026-08-03. This was living as ONE BULLET on the "where it
+     stands" slide, which is the wrong place for the finding that answers the
+     single most likely objection to the whole thesis: "a modern agent with a
+     search tool would just fix these". */
+  `<div class="slide">
+    <div class="eyebrow">result 6 (RQ5) — and if the model searches for itself?</div>
+    <h2>Give them a search box. <span class="red">Two thirds stay wrong.</span></h2>
+    <p class="lede" style="margin-bottom:10px">The last slide <em>handed</em> the model a
+      document. Here nobody hands it anything: each model decides whether to look
+      something up, writes its own queries, and gets up to four lookups${q('agentic')}.
+      Run twice — once against Wikipedia, once against <b>open web search</b>${q('websearch')}.</p>
+    <div class="bars">
+      ${bar('searching Wikipedia'+q('arm_wiki'),V.wiki,V.matched,'linear-gradient(90deg,#34d399,#2dd4bf)',
+            `${V.wiki}/${V.matched} — ${pc(V.wiki_rate)}`)}
+      ${bar('searching the open web'+q('arm_web'),V.web,V.matched,'linear-gradient(90deg,#60a5fa,#a78bfa)',
+            `${V.web}/${V.matched} — ${pc(V.web_rate)}`)}
+      ${bar('<b>not fixed by either</b>'+q('arm_neither'),V.neither,V.matched,
+            'linear-gradient(90deg,#f87171,#f472b6)',
+            `${V.neither}/${V.matched} — ${pc(V.neither_rate)}`,true)}
+    </div>
+    <p class="big">Two independent sources, four makers, every model free to
+      search${q('agentgood')} — and <b class="red">${pc(V.neither_rate)}</b> of the
+      blind spots do not move.</p>
+    <p class="lede">The encyclopedia and the open web are <b>indistinguishable</b>
+      ${q('mcnemar')}: only ${V.web_only+V.wiki_only} of ${V.matched} questions
+      came out differently between them. Until this run every document had come from
+      Wikipedia; asking the open web as well did not change the answer.</p>
+  </div>`,
+
+  /* 10b ─ the belief arms. Added 2026-08-25. RQ4 handed models a document,
+     RQ5 handed them a search tool, and both ask whether the model can FIND the
+     fact. This asks whether it HOLDS the belief -- and it is also the direct
+     answer to "just make it say I don't know", which the deck previously
+     answered only with a confidence threshold. Reads S.belief. */
+  ((B)=>!B||!B.counter?'':`<div class="slide">
+    <div class="eyebrow">result 7 — is it ignorance, or is it belief?</div>
+    <h2>Tell it that it might be wrong. <span class="red">Almost nothing moves.</span></h2>
+    <p class="lede">Retrieval and search both ask whether the model can <em>find</em>
+      the fact. These two prompts ask whether it <b>holds the belief</b> — no
+      documents, no retriever. Run on all ${n0(B.counter.n_blind)} blind spots
+      <b>and on ${n0(B.counter.n_control)} questions the ensemble already had right</b>,
+      because "repaired 1%" means nothing without what it broke.</p>
+    ${(()=>{const c=B.counter, a=B.abstain;
+      // Wilson 95% upper bound for k=0 of n: z^2/(n+z^2).
+      const up0=n=>1.96*1.96/(n+1.96*1.96);
+      const row=(lab,sub,r,cls)=>`<tr><td class="k" style="text-align:left"><b>${lab}</b><br>
+            <span class="muted" style="font-size:.85em">${sub}</span></td>
+          <td class="mono ${cls}">${pc1(r.repaired)} <span class="muted">(${r.repaired_n})</span></td>
+          <td class="mono muted">${pc1(r.broke)} <span class="muted">(${r.broke_n}, ${r.ties_control} of them 2&ndash;2 ties)</span></td>
+          <td class="mono red">${pc1(r.broke_strict)} <span class="muted">(${r.broke_strict_n})</span></td></tr>`;
+      return `<table style="margin:8px 0 12px">
+      <tr><th style="text-align:left">prompt</th><th>repaired</th><th>broke, any reading</th><th>broke, majority wrong</th></tr>
+      ${row('&ldquo;Some sources disagree. Reconsider.&rdquo;','a reason to doubt, and no new information',c,'')}
+      ${row('&ldquo;If unsure, say I don&rsquo;t know.&rdquo;','the most common suggestion this project gets',a,'amber')}
+    </table>
+    <div class="cols">
+      <div><p class="big">Counter-evidence does not move the belief either way:
+        requiring a majority of the four to be wrong, it repairs ${pc1(c.repaired)} and breaks
+        ${pc1(c.broke_strict)}. Permission to abstain repairs
+        <b>${a.repaired_n===0?'zero':n0(a.repaired_n)} of ${n0(a.n_blind)}</b>${a.repaired_n===0?`
+        — upper bound ${(up0(a.n_blind)*100).toFixed(2)}%`:''}.</p>
+        <p class="lede" style="font-size:13.5px">An earlier version of this slide said
+        counter-evidence breaks four answers for every one it repairs. ${c.ties_control}
+        of its ${c.broke_n} &ldquo;broken&rdquo; controls were 2&ndash;2 ties, where the
+        tie rule, not the model, decided the verdict; that claim is retired.</p></div>
+      <div><p>And the hedging is real: at least one model abstained on
+        <b class="amber">${pc1(a.abstain_blind)}</b> of blind spots against
+        <b>${pc1(a.abstain_control)}</b> of correct ones — a
+        ${(a.abstain_blind/a.abstain_control).toFixed(1)}&times; lift. It hedges more
+        often on what it is about to get wrong${a.repaired_n===0?', and <b>it never converts</b>':''}.</p></div>
+    </div>`})()}
+    <p class="lede" style="font-size:14px">The behavioural twin of the confidence
+      result, reached from the other side: RQ1 measured a number the model emits,
+      this measured what it does when asked outright. Same answer.</p>
+  </div>`)(S.belief),
+
+  /* 10c ─ the artifact correction. Added 2026-08-25, and it is a correction
+     to this deck's own headline number, which is exactly why it gets a slide
+     rather than a footnote. ISSUES #55. */
+  ((A)=>!A||!A.rate?'':`<div class="slide">
+    <div class="eyebrow">a correction to our own headline</div>
+    <h2>How many of the ${n0(ov.silent)} are <span class="red">real</span>?</h2>
+    <p class="lede">A blind spot is a question the automatic grader marked wrong
+      for all four models. So the first thing to ask about ${n0(ov.silent)} is how
+      many of them the <b>grader</b> got wrong. Until 25 August 2026 this project
+      answered <b>&ldquo;at most 5.6%&rdquo;</b>. That number counted one kind of
+      mistake and was reported as though it counted all of them.</p>
+    <div class="cols" style="margin-top:6px">
+      <div>
+        <table>
+          <tr><th style="text-align:left">question set</th><th>grader too strict</th></tr>
+          ${A.by_dataset.filter(d=>d.n>50).sort((a,b)=>b.rate-a.rate).map(d=>`
+            <tr><td class="k" style="text-align:left">${d.dataset}
+              <span class="muted">n=${d.n}</span></td>
+              <td class="mono ${d.rate>.2?'red':''}">${pc1(d.rate)}</td></tr>`).join('')}
+          <tr><td class="k" style="text-align:left"><b>all of them</b></td>
+              <td class="mono red"><b>${pc1(A.rate)}</b></td></tr>
+        </table>
+        <p class="lede" style="font-size:14px;margin-top:8px">
+          All ${n0(A.n_total)} sent to a judge with the grade hidden${A.undecided?`;
+          ${n0(A.n_judged)} verdicts are in and ${n0(A.undecided)} calls failed and are
+          being re-run, so the rate is over the ${n0(A.n_judged)} decided`:''}.
+          <b>${n0(A.genuine)}</b> survive as genuine — a rate of
+          ${pc1(A.genuine/C.analysed)}, not ${pc1(ov.silent/ov.n)}.</p>
+      </div>
+      <div>
+        <div class="card"><h3>What the grader called wrong</h3>
+          <p class="mono" style="font-size:12.5px;line-height:1.9;margin:0">
+            &ldquo;Bangladesh&rdquo; <span class="muted">for</span> &ldquo;People&rsquo;s Republic of Bangladesh&rdquo;<br>
+            &ldquo;1640s&rdquo; <span class="muted">for</span> &ldquo;40&rsquo;s&rdquo;<br>
+            &ldquo;The bumblebee bat&rdquo; <span class="muted">for</span> &ldquo;Bat&rdquo;<br>
+            &ldquo;Constantine X Doukas&rdquo; <span class="muted">for</span> &ldquo;Konstantinos X Doukas&rdquo;<br>
+            &ldquo;Smoking&rdquo; <span class="muted">for</span> &ldquo;Tobacco or alcohol&rdquo;</p></div>
+        <p class="lede" style="font-size:14px;margin-top:10px">The old test looked for
+          answers <i>inside</i> the key. None of these is inside anything, so it
+          could never have found them. <b>A bound is only as wide as the test that
+          produced it.</b></p>
+      </div>
+    </div>
+    <p class="big" style="margin-top:10px">This makes our headline
+      <em>smaller</em>. It is on a slide because most biases this project has found
+      in itself have run the other way.</p>
+  </div>`)(S.artifact),
+
+  /* 10d ─ the cross-generation artifact result. Added 2026-08-26. This slide
+     exists because it is the ONLY place in the project where a correction
+     removes a claim rather than resizing one, and because the argument it
+     replaces was written on this deck's own authority. ISSUES #58, RESULTS
+     Finding 12. Every figure reads S.arms; nothing is typed. */
+  ((A)=>!A||!A.judges?'':(()=>{
+    const J=A.judges.find(j=>j.key===A.primary), O=A.judges.find(j=>j!==J);
+    const pc=v=>(v*100).toFixed(2)+'%';
+    const row=j=>`<tr>
+      <td class="k" style="text-align:left">${j.label}
+        <span class="muted">${j.in_ensemble?'&mdash; in the 2025 ensemble':'&mdash; in neither arm'}</span></td>
+      <td class="mono">${pc(j.arm['2024'].rate)}</td>
+      <td class="mono">${pc(j.arm['2025'].rate)}</td>
+      <td class="mono red"><b>+${(j.gap*100).toFixed(1)} pts</b></td></tr>`;
+    return `<div class="slide">
+    <div class="eyebrow">result 4b (RQ3) &mdash; and it retires one of our own claims</div>
+    <h2>The grader is <span class="red">stricter</span> on the newer models.
+      We had assumed it was not.</h2>
+    <p class="lede">Every generation result compares two arms, and only one of
+      them had ever been adjudicated. The gap was covered by an argument:
+      <i>both arms share a grader, so a uniform strictness cancels.</i> It is not
+      uniform. The 2024 arm's <b>${j2(J)}</b> blind spots were judged with the
+      same judge, prompt and rule.</p>
+    <div class="cols" style="margin-top:6px">
+      <div>
+        <table>
+          <tr><th style="text-align:left">judge</th><th>2024</th><th>2025</th><th>gap</th></tr>
+          ${A.judges.map(row).join('')}
+        </table>
+        <p class="lede" style="font-size:14px;margin-top:8px">Two judges, because
+          the first result had to be attacked before it could be believed. The
+          case representative is the first model in sorted order &mdash; so every
+          2025 case was judged on <b>${J.label}'s own answer, by ${J.label}</b>.
+          Self-favouring inflates exactly this gap. Re-judging both arms with
+          <b>${O.label}</b>, which is in neither ensemble,
+          <b class="red">${O.gap>J.gap?'widened':'narrowed'}</b> it.</p>
+      </div>
+      <div>
+        <table>
+          <tr><th style="text-align:left">the three categories</th><th>persisted</th><th>emerged</th><th>ratio</th></tr>
+          <tr><td class="k" style="text-align:left">as graded</td>
+            <td class="mono">${S.rq3.persisted}</td>
+            <td class="mono">${S.rq3.emerged}</td>
+            <td class="mono">${(S.rq3.emerged/S.rq3.persisted).toFixed(2)}&times;</td></tr>
+          <tr><td class="k" style="text-align:left"><b>adjudicated</b></td>
+            <td class="mono"><b>${J.rq3.persisted}</b></td>
+            <td class="mono"><b>${J.rq3.emerged}</b></td>
+            <td class="mono green"><b>${J.rq3.ratio.toFixed(2)}&times;</b></td></tr>
+        </table>
+        <p class="lede" style="font-size:14px;margin-top:8px">
+          <b class="green">The ratio survives</b>${J.rq3.ratio>S.rq3.emerged/S.rq3.persisted?' and slightly strengthens':''}: an
+          upgrade still creates about twice as many newly hidden cases as it
+          inherits. <b class="red">The growth in the total is not significant</b> &mdash;
+          ${n0(J.arm['2024'].genuine)} genuine blind spots become
+          ${n0(J.arm['2025'].genuine)}; paired over the same questions, exact McNemar gives
+          <span class="mono">p = ${J.rq3.p_growth.toFixed(3)}</span>
+          (${O.label}: <span class="mono">p = ${O.rq3.p_growth.toFixed(3)}</span>).
+          That claim is withdrawn.${J.arm['2025'].unclear?` <span class="muted">${n0(J.arm['2025'].unclear)}
+          failed judge calls in the 2025 arm are being re-run.</span>`:''}</p>
+      </div>
+    </div>
+    <p class="big" style="margin-top:10px">When a measurement carries a known
+      systematic error, <b>prefer the ratio to the level</b> &mdash; the level
+      carries the error, the ratio mostly cancels it.</p>
+  </div>`})())(S.arms),
+
+  /* 11 ─ how the project actually went */
+  `<div class="slide">
+    <div class="eyebrow">the part a slide deck usually leaves out</div>
+    <h2>Twice, this project produced a clean result that was <span class="red">not true</span></h2>
+    <p class="lede" style="margin-bottom:14px">Both times the table looked
+      finished. Nothing crashed, no error appeared, and the numbers were internally
+      consistent. Here is what each one actually was, and the check that caught it.</p>
+    <div class="cols">
+      <div class="card bad">
+        <h3 class="red">1 · We were not testing the models we thought</h3>
+        <p style="font-size:15px;margin:0">The experiment compared 2024 models against
+          2025 models. We asked the provider for the 2024 model and it quietly served
+          the <b>2025 one under the old name</b> for some of the models — so the
+          comparison partly measured the new models against themselves. Two whole experiments${q('arm')}, <b>340,728 answers</b>,
+          measured nothing and were thrown away.</p>
+        <p class="mono muted" style="font-size:12.5px;margin:9px 0 0">
+          caught by: are these two "different" models giving identical answers? up to 99.6% identical.<br>
+          fixed by: a gate that checks model identity before any paid run starts</p>
+      </div>
+      <div class="card bad">
+        <h3 class="red">2 · A finding produced by a broken tool</h3>
+        <p style="font-size:15px;margin:0">The result read <i>"giving models documents
+          does not help them"</i> — a clean table, reproduced <b>three times</b>. At first
+          the search step returned <b>nothing at all</b> (cached rate-limit errors), so the
+          models were handed blank pages. Once that was fixed, searching on the whole
+          question returned <b>off-topic pages</b>.</p>
+        <p class="mono muted" style="font-size:12.5px;margin:9px 0 0">
+          caught by: is the correct answer even present in the text we handed over? 8%.<br>
+          fixed by: fetching the entity's own Wikipedia page instead. 8% → 70%, and the result reversed</p>
+      </div>
+    </div>
+    <p class="lede" style="margin-top:16px"><b>${S.defects} defects found, ${S.defects} fixed${
+      /* "zero open" only once the re-runs that close #70/#71/#76 have landed:
+         no failed adjudications left and the alias-aware adjudicator exported */
+      (S.artifact && S.artifact.undecided === 0 && S.adjudicator && S.adjudicator.n)
+        ? ', zero open.' : ' in code; three results wait on a paid re-run.'}</b>
+      Every one, its cause and its fix is written down in <span class="mono">ISSUES.md</span>;
+      every design choice and the options rejected are in <span class="mono">DECISIONS.md</span>.</p>
+  </div>`,
+
+  /* 11 ─ the methodological finding */
+  `<div class="slide">
+    <div class="eyebrow">and this became a finding of its own</div>
+    <h2>Most biases we found in the numbers made our own results look <em>better</em></h2>
+    <p class="lede" style="margin-bottom:14px">Bugs should land in random
+      directions. These did not — <b>most biases found in the numbers leaned the same way</b>, toward
+      the answer we were hoping for. Four examples:</p>
+    <div class="cols">
+      <div>
+        <ul>
+          <li><b>Small samples looked better than they were.</b> Every effect measured
+            on 300 questions came out smaller, or vanished, at full scale — five times
+            out of five.</li>
+          <li><b>The earlier graders were too generous:</b> when they erred, they
+            marked wrong answers <em>correct</em> — which hides blind spots and
+            flatters the detection score. <span class="muted">Hand-labelling later
+            cleared the final grader (${S.grader_check.generous} generous vs
+            ${S.grader_check.harsh} harsh, across ${S.grader_check.judged} judged
+            cases in the ${S.grader_check.stratum} stratum); the bias was real in
+            the three that came before it.</span></li>
+          <li><b>The one bug that tilted the head-to-head comparison handicapped
+            the competing method</b>: its arm ran without retries.</li>
+          <li><b>Fixing things created things.</b> Three of the four defects found in
+            one audit were introduced by that same day's fixes.</li>
+        </ul>
+      </div>
+      <div class="card good">
+        <h3 class="green">Why this belongs in the thesis</h3>
+        <p style="font-size:15px;margin:0">If the biases had been random, about half would
+          have made the results look <em>worse</em>. Few did, and the exceptions are logged. So "the errors were small,
+          and in our favour" is not a sentence anyone should accept — including us.<br><br>
+          A pipeline that can produce a confident, coherent, wrong table is the normal
+          case, not the exception. <b>So the methodology chapter is about how each
+          number was attacked, not just what it came out as.</b></p>
+      </div>
+    </div>
+  </div>`,
+
+  /* 12 ─ the tool */
+  `<div class="slide">
+    <div class="eyebrow">the contribution</div>
+    <h2>The tool: five questions, five linked views</h2>
+    <div class="cols" style="gap:18px">
+      <div>
+        <div class="card" style="margin-bottom:10px"><h3>The map</h3>
+          <p class="lede" style="margin:0;font-size:14.5px"><i>Where do the errors live?</i>
+          ${n0(C.analysed)} questions placed by similarity. Blind spots turn out to
+          <b>cluster</b> — invisible in any table of averages.</p></div>
+        <div class="card"><h3>Inspector</h3>
+          <p class="lede" style="margin:0;font-size:14.5px"><i>Why did all four fail together?</i>
+          Every answer and confidence, side by side, with a label you leave behind.</p></div>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:10px"><h3>Generation diff</h3>
+          <p class="lede" style="margin:0;font-size:14.5px"><i>Did the upgrade fix this, or cause it?</i>
+          2024 against 2025 on the same question — tagged persisted, healed or emerged.</p></div>
+        <div class="card" style="margin-bottom:10px"><h3>Signal strength</h3>
+          <p class="lede" style="margin:0;font-size:14.5px"><i>How much should I trust this here?</i>
+          ${f3(ov.auc)} overall hides ${f3(Math.min(...sig.by_dataset.map(d=>d.auc)))} on one
+          dataset and ${f3(Math.max(...sig.by_dataset.map(d=>d.auc)))} on another.</p></div>
+        <div class="card"><h3>Which ensemble? <span class="muted" style="font-size:12px">new</span></h3>
+          <p class="lede" style="margin:0;font-size:14.5px"><i>Given a budget of two, three or four
+          models, which ones?</i> ${!S.ablation ? '154 ensembles' : S.ablation.n_ensembles + ' ensembles'}
+          scored for nothing — and the answer is not “the most accurate”.</p></div>
+      </div>
+    </div>
+    <p class="lede mono" style="font-size:12.5px;margin-top:12px;color:var(--ink3)">
+      D3 + SVG for the analytical panels — real scales, real axes, brushing.
+      The map stays canvas: ${n0(C.analysed)} marks are expected to be too many for an SVG
+      data-join to redraw smoothly (a design judgement, not a measurement). The mark count picks the renderer, not the library.</p>
+    <div style="margin-top:18px">
+      ${toolBtn("Open the tool →")}
+      <!-- Labelled, not removed. The page is a genuine record of how the
+           pipeline is built, and its numbers are all pilot-era -- see ISSUES
+           #47. An unlabelled link from a results deck to a page reporting the
+           OPPOSITE baseline result is how a reviewer finds a contradiction
+           before you do. -->
+      <a class="cta ghost" href="walkthroughs.html">two documented paths through it →</a>
+      <!-- The caveat that used to sit here -- "proposal-era numbers" -- was
+           honest for a year and stopped being true on 2026-08-25, when the page
+           was rebuilt against the real run (ISSUES #53). A stale WARNING is the
+           same defect class as a stale number: it tells a reader to discount a
+           page that is now correct. -->
+      <a class="cta ghost" href="pipeline.html">the pipeline, level by level</a>
+    </div>
+  </div>`,
+
+  /* 12b ─ who uses it, and what they DO afterwards.
+     Added 2026-08-07. The previous slide says what each view answers; it stops
+     at "so the reader can form their own judgement", which is not a claim
+     anyone can check. A visual-analytics contribution is judged on whether it
+     supports real tasks, and a task ends in a DECISION, not in understanding.
+     Each row below is a persona from TASKS.md §1 paired with the thing they do
+     differently once they have looked. */
+  `<div class="slide">
+    <div class="eyebrow">who it is for</div>
+    <h2>How is this tool useful, and to whom?</h2>
+    <p class="lede" style="margin-top:0">It shows <b>where a “the models disagree” warning goes blind</b> —
+      which one accuracy number cannot show — and lets you read those exact cases.</p>
+    <style>#whofor td,#whofor th{text-align:left;vertical-align:top}</style>
+    <table id="whofor" style="margin:6px 0 14px">
+      <tr><th style="width:19%">who</th><th style="width:33%">what they find</th>
+          <th style="width:17%">where in the tool</th><th>what they do differently</th></tr>
+      <tr><td class="k"><b>ML engineer</b><br>
+            <span class="muted" style="font-size:13px">shipping a system that trusts
+            the models when they agree</span></td>
+        <td>of ${n0(F.unanimous)} questions where all four agree, every model
+            is wrong on <b class="red">${pc1(F.silent/F.unanimous)}</b> — and those
+            wrong ones <b>cluster by topic</b></td>
+        <td>tab 1 the map → tab 2 read the cases</td>
+        <td>sends the risky topics to search or to a person instead of trusting
+            agreement</td></tr>
+      <tr><td class="k"><b>Safety researcher</b><br>
+            <span class="muted" style="font-size:13px">asking whether better models
+            fix this</span></td>
+        <td>newer models make fewer mistakes, but the share that are shared rose
+            <b>${pc1(S.rq3.rates[0].share)} → <span class="red">${pc1(S.rq3.rates[1].share)}</span></b>;
+            an upgrade hides about 2 new blind spots for every 1 it carries over</td>
+        <td>tab 3 did upgrading help?</td>
+        <td>plans for the blind spot now instead of waiting for the next model</td></tr>
+      <tr><td class="k"><b>Benchmark curator</b><br>
+            <span class="muted" style="font-size:13px">maintaining an answer
+            key</span></td>
+        <td>about ${S.artifact?pc1(S.artifact.rate):'a fifth'} of blind spots are the answer key's
+            fault — “Bangladesh” rejected for “People's Republic of Bangladesh”,
+            “Smoking” rejected for “Tobacco or alcohol”</td>
+        <td>tab 2, “answer key looks strict” (${S.keyflags} flagged)</td>
+        <td>adds accepted alternatives and updates stale answers</td></tr>
+    </table>
+    <p class="lede" style="font-size:14px"><b>Why a tool and not a table:</b> “did this question get
+      fixed by the upgrade, or did it just go quiet?” needs one question held fixed while the model
+      generation changes — a case, not an average. <span class="muted">Usefulness is argued through
+      walkthroughs; no user study was run (Chapter 6).</span></p>
+  </div>`,
+
+  /* 13 ─ where it stands.  Rewritten 2026-08-25: the old version listed
+     "discovery walkthroughs" as remaining when two are written, and "3-4
+     domain reviewers" when the protocol says six tasks. A status slide that is
+     itself out of date is the same defect as a stale number -- ISSUES #53. */
+  `<div class="slide">
+    <div class="eyebrow">where it stands</div>
+    <h2>Measurement, evaluation and the write-up are done. Final review is under way.</h2>
+    <table style="margin:4px 0 12px">
+      <tr><th align="left">part</th><th align="left" style="text-align:left">state</th></tr>
+      <tr><td class="k" align="left"><b>All model work</b> — RQ1 through RQ5<br>
+            <span class="muted" style="font-size:.85em">two full arms over one frozen
+            question set · ${n0(C.generations)} graded answers · 0 failed calls${
+            S.artifact&&S.artifact.undecided?` · re-runs pending: ${n0(S.artifact.undecided)}
+            failed adjudication calls, and the RQ4 and RQ5 cases the correction pass reopened`:''}</span></td>
+          <td align="left" class="mono ${S.artifact&&S.artifact.undecided?'amber':'green'}">${
+            S.artifact&&S.artifact.undecided?'re-runs pending':'complete'}</td></tr>
+      <tr><td class="k" align="left"><b>The instrument</b> — five linked views<br>
+            <span class="muted" style="font-size:.85em">deployed · ${n0(S.handlabels)} blinded
+            verdicts labelled with a separate command-line tool${!S.irr||!S.irr.kappa?'':`, and a second annotator
+            agrees at &kappa; ${f3(S.irr.kappa)}`} · ${S.defects} defects fixed ·
+            ${S.tests} tests passing</span></td>
+          <td align="left" class="mono green">complete</td></tr>
+      <tr><td class="k" align="left"><b>Evaluation</b> — analytical, no participants<br>
+            <span class="muted" style="font-size:.85em">what the instrument found while it was
+            being built · two documented discovery paths · a cognitive walkthrough that
+            flags two steps with no visible control · the tool's data size and rendering load</span></td>
+          <td align="left" class="mono green">complete</td></tr>
+      <tr><td class="k" align="left"><b>The thesis document</b><br>
+            <span class="muted" style="font-size:.85em">${!S.writeup ? 'material exists across five records'
+              : `${S.writeup.drafted} of ${S.writeup.total} chapters drafted &middot;
+                 ${n0(S.writeup.words)} words (target ${n0(S.writeup.target)}) &middot;
+                 every figure that has a field in the exported records checked against them`}</span></td>
+          <td align="left" class="mono ${!S.writeup || !S.writeup.drafted ? 'amber' : 'teal'}">${
+            !S.writeup ? 'not started'
+            : S.writeup.drafted === S.writeup.total ? 'drafted'
+            : `${Math.round(100 * S.writeup.words / S.writeup.target)}% drafted`}</td></tr>
+    </table>
+    <p class="big">The signal was prior work. The blind spot, the tool that finds it,
+      and the evidence that a newer, more accurate ensemble shares a larger fraction of
+      its mistakes (${(S.rq3.rates[1].share/S.rq3.rates[0].share).toFixed(2)}×, one generation pair) — that is the contribution.</p>
+    <p class="lede" style="font-size:13.5px;margin-top:8px">The six-task study was
+      <b>not run</b>, and §6.1 says so in its first paragraph. The protocol, the
+      materials and an instrumented unmoderated mode are all still in the repository,
+      so anyone can run it later — and §6.6 writes down <b>two predictions</b> it would
+      score.</p>
+  </div>`,
+
+  /* 13b ─ the plan and the asks.  Added 2026-08-25.  This slide exists because
+     the alternative was a separate status page, and this deck IS the
+     presentation -- a second page would split the one link in two. */
+  `<div class="slide">
+    <div class="eyebrow">the plan, and the one ask left</div>
+    <h2>Nothing left is waiting on anybody else's calendar.</h2>
+    <div class="cols">
+      <div>
+        <table>
+          <tr><th style="text-align:left">when</th><th style="text-align:left">work</th></tr>
+          <tr><td class="mono green" style="text-align:left;white-space:nowrap">done</td>
+              <td style="text-align:left">every experiment · intervals on every claim ·
+                second annotator · the analytical evaluation ·
+                <b>${S.writeup?`${S.writeup.drafted} of ${S.writeup.total} chapters drafted`:'chapters in progress'}</b></td></tr>
+          <tr><td class="mono amber" style="text-align:left;white-space:nowrap">Oct</td>
+              <td style="text-align:left">final read-through · advisor feedback ·
+                <b>submit</b> (deadline mid-October 2026)</td></tr>
+          <tr><td class="mono muted" style="text-align:left;white-space:nowrap">after</td>
+              <td style="text-align:left">the preprint, assembled from the thesis and reordered —
+                <b>not part of the project</b></td></tr>
+        </table>
+        <p class="lede" style="font-size:14px;margin-top:10px">Everything else is cut
+          on purpose and written down as cut: a $5 experiment to separate model
+          generation from model size — reframed instead — and two of the four
+          planned walkthroughs. The full thesis is written, SFSU-formatted and
+          fact-checked: every figure in it that has a field in the exported records is
+          checked against them.
+          The preprint left the project on 30 August and will be assembled from the
+          thesis afterwards.</p>
+        ${!S.writeup ? '' : `<div class="mono" style="font-size:12px;color:var(--ink3);
+            display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:10px">
+          ${S.writeup.chapters.map(c=>`<span style="color:${
+            c.state === 'drafted' ? 'var(--teal)'
+            : c.state === 'blocked' ? 'var(--red)' : 'var(--ink3)'}">${c.n} ${c.title.toLowerCase()}${
+            c.state === 'drafted' ? ' \u2713' : c.state === 'blocked' ? ' \u25cb' : ''}</span>`).join('')}
+        </div>`}
+      </div>
+      <div>
+        <h3 class="amber">What I still need</h3>
+        <ul>
+          <li><b>Is the analytical evaluation enough?</b> No user study was run.
+            Chapter 6 reports a cognitive walkthrough and the
+            record of the instrument finding an error in <em>this project's own
+            headline number</em> — the correction that took the artifact bound from
+            5.6% to ${S.artifact?pc1(S.artifact.rate):'a measured rate'}. That is the call I most need yours on.</li>
+          ${(()=>{const A=S.arms; if(!A||!A.judges) return '';
+            const J=A.judges.find(j=>j.key===A.primary), O=A.judges.find(j=>j!==J);
+            return `<li><b class="green">Done, and it retired an argument.</b> The 2024 arm's ${j2(J)}
+            blind spots have now been adjudicated too. Grading is <b>not</b> equally
+            strict across generations — <span class="mono">${pc1(J.arm['2024'].rate)}</span> answer-key
+            artifacts against <span class="mono red">${pc1(J.arm['2025'].rate)}</span> (${J.label}),
+            and <span class="mono">${pc1(O.arm['2024'].rate)}</span> against
+            <span class="mono red">${pc1(O.arm['2025'].rate)}</span> from ${O.label}, a judge in
+            neither ensemble. “The RQ3 comparison survives because both arms share a grader”
+            was an argument and is now a measurement that <em>contradicts</em> it. The
+            RQ3 <b>ratio</b> survives (${J.rq3.ratio.toFixed(2)}×); the growth in the
+            <b>total</b> is not significant (exact McNemar
+            <span class="mono">p = ${J.rq3.p_growth.toFixed(3)}</span>), and is withdrawn.</li>`})()}
+          <li><b class="green">Done.</b> A second annotator labelled ${S.irr&&S.irr.annotators?n0(S.irr.annotators[0].labelled):'a sample of'} cases
+            blind${!S.irr||!S.irr.kappa?'':` — &kappa; ${f3(S.irr.kappa)}
+            [${f3(S.irr.annotators[0].lo)}, ${f3(S.irr.annotators[0].hi)}],
+            ${pc1(S.irr.annotators[0].agreement)} agreement`}. That was the
+            largest open limitation in the thesis and it is closed.</li>
+          <li><b class="green">Done, and it paid.</b> ${(()=>{const A=S.ablation;
+            if(!A||!A.phi_silent) return 'Every ensemble buildable from the eight models was scored.';
+            const p=A.phi_silent.find(r=>r.k===4), e=A.err_silent.find(r=>r.k===4);
+            return `All <b>${A.n_ensembles}</b> ensembles buildable from the eight models were
+            scored. Across the ${(A.by_size_all.find(r=>r.k===4)||{}).n} four-model ensembles, error correlation predicts the blind-spot rate at
+            <span class="mono red">${p.r>0?'+':''}${p.r.toFixed(3)}</span>; mean error rate
+            predicts it at only <span class="mono">${e.r.toFixed(3)}</span>.`})()}
+            <b>Pick an ensemble for decorrelation, not for accuracy</b> — that was a
+            scope call worth making.</li>
+        </ul>
+      </div>
+    </div>
+  </div>`,
+
+  /* 14 ─ end */
+  `<div class="slide" style="align-items:flex-start">
+    <h1 style="font-size:clamp(30px,5.2vw,68px)">Where ensembles fail<br>
+      <span class="grad">they fail together</span></h1>
+    <div class="stats" style="margin-top:24px">
+      <div class="st"><b class="teal">${f3(ov.auc)}</b><span>the signal works${q('end_auc')}</span></div>
+      <div class="st"><b class="red">${!S.artifact||!S.artifact.genuine?n0(ov.silent):n0(S.artifact.genuine)}</b><span>and here it cannot${q('end_silent')}</span></div>
+      <div class="st"><b class="amber">${n0(R.emerged)}</b><span>newly hidden after an upgrade (as graded)${q('end_emerged')}</span></div>
+    </div>
+    <div style="margin-top:24px">
+      ${toolBtn("Open the tool →")}
+    </div>
+    <p class="lede mono" style="margin-top:26px;font-size:13px">
+      Shivani Bokka · M.S. Data Science &amp; Artificial Intelligence · San Francisco State University<br>
+      advisor Dr. Shahrukh Humayoun · VI-Lab</p>
+  </div>`
+  ];
+}
+
+let i=0, N=0;
+function build(){
+  const deck=document.getElementById('deck');
+  deck.innerHTML=slides().join('');
+  N=deck.children.length;
+  const dots=document.getElementById('dots');
+  dots.innerHTML=Array.from({length:N},(_,k)=>'<i data-k="'+k+'"></i>').join('');
+  dots.querySelectorAll('i').forEach(d=>d.onclick=()=>go(+d.dataset.k));
+  document.getElementById('prev').onclick=()=>go(i-1);
+  document.getElementById('next').onclick=()=>go(i+1);
+  addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight'||e.key===' '||e.key==='PageDown'){e.preventDefault();go(i+1)}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();go(i-1)}
+    else if(e.key==='Home')go(0); else if(e.key==='End')go(N-1);
+  });
+  // Clicking the slide body used to advance it. Removed: it fired on every
+  // stray click -- selecting text, dismissing a tooltip, missing a link -- and
+  // a deck that moves when you did not ask it to is worse than one extra key.
+  // Movement is now ONLY the arrows below, the dots, and the keyboard.
+  tips();
+  // Deep links: index.html#7 opens slide 7. Without the hashchange listener the
+  // hash was read only at build time, so pasting a #n link into an already-open
+  // tab silently did nothing.
+  addEventListener('hashchange',()=>{
+    const m=location.hash.match(/\d+/);
+    if(m && +m[0]-1!==i) go(Math.min(N-1,Math.max(0,+m[0]-1)));
+  });
+  const h=location.hash.match(/\d+/);
+  go(h?Math.min(N-1,+h[0]-1):0);
+}
+// Hover, tap or tab to a ? and the tip appears above it -- flipped below when
+// there is no room above, and clamped so it never runs off either edge.
+// Delegated from document, so it survives any rebuild of the deck.
+function tips(){
+  const el=document.createElement('div');
+  el.id='tip'; el.hidden=true; document.body.appendChild(el);
+  const hide=()=>{el.hidden=true};
+  function show(t){
+    let html=TIPS[t.dataset.t];
+    if(typeof html==='function') html=S?html():'';
+    if(!html){hide();return}
+    el.innerHTML=html; el.hidden=false;
+    const r=t.getBoundingClientRect(), w=el.offsetWidth, h=el.offsetHeight;
+    const top=r.top-h-10;
+    el.style.top=(top<8 ? r.bottom+10 : top)+'px';
+    el.style.left=Math.max(8,Math.min(r.left+r.width/2-w/2,innerWidth-w-8))+'px';
+  }
+  const at=e=>e.target.closest&&e.target.closest('.q');
+  document.addEventListener('mouseover',e=>{const t=at(e); if(t)show(t); else hide()});
+  document.addEventListener('focusin', e=>{const t=at(e); t?show(t):hide()});
+  document.addEventListener('focusout',hide);
+  // Tap on a touch screen: there is no hover, so click has to open it. Anything
+  // else on the page closes it.
+  document.addEventListener('click',e=>{const t=at(e); t?show(t):hide()});
+  addEventListener('scroll',hide,true);
+  addEventListener('resize',hide);
+  addEventListener('keydown',e=>{if(e.key==='Escape')hide()});
+}
+
+function go(k){
+  if(k<0||k>=N) return;
+  i=k;
+  const tp=document.getElementById('tip');           // never leave a tip
+  if(tp) tp.hidden=true;                             // floating over the next slide
+  const deck=document.getElementById('deck');
+  [...deck.children].forEach((s,n)=>s.classList.toggle('on',n===i));
+  document.querySelectorAll('#dots i').forEach((d,n)=>d.classList.toggle('on',n===i));
+  document.getElementById('bar').style.width=((i+1)/N*100)+'%';
+  document.getElementById('num').textContent=(i+1)+' / '+N;
+  document.getElementById('hint').hidden = i>0;
+  history.replaceState(null,'','#'+(i+1));
+  // grow the bars after the slide is on screen, so the motion is visible
+  const cur=deck.children[i];
+  cur.querySelectorAll('.fl').forEach(el=>{el.style.width='0'});
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    cur.querySelectorAll('.fl').forEach(el=>{el.style.width=el.dataset.w+'%'});
+  }));
+}
+</script>

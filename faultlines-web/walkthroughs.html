@@ -1,0 +1,1069 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FaultLines — discovery walkthroughs</title>
+<style>
+  /* Same palette as the deck, but this is a DOCUMENT: it scrolls, it has a
+     table of contents, and it is meant to be read at a desk rather than
+     projected. The deck answers "what did you find"; this answers "how would
+     someone else find it". */
+  :root{
+    --bg:#0b102a; --panel:#151c3e; --panel2:#1b2450; --ink:#eaeef9; --ink2:#b6bed8;
+    --ink3:#828cae; --rule:#2a3566; --teal:#2dd4bf; --violet:#a78bfa; --amber:#fbbf24;
+    --pink:#f472b6; --blue:#60a5fa; --green:#34d399; --red:#f87171;
+    --mono:"JetBrains Mono",Consolas,ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.62 "Inter","Segoe UI",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:38px 22px 90px}
+  h1{font-size:clamp(28px,4vw,42px);line-height:1.15;margin:0 0 6px;letter-spacing:-.02em}
+  h2{font-size:clamp(21px,2.6vw,29px);margin:56px 0 6px;line-height:1.2;letter-spacing:-.01em}
+  h3{font-size:17px;margin:30px 0 8px;color:var(--ink)}
+  p{margin:0 0 14px;color:var(--ink2)}
+  b,strong{color:var(--ink)}
+  a{color:var(--blue)}
+  .mono{font-family:var(--mono)}
+  .eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--teal);font-weight:700;margin-bottom:8px}
+  .lede{font-size:18px;color:var(--ink2)}
+  .muted{color:var(--ink3)}
+
+  .meta{display:flex;flex-wrap:wrap;gap:8px 26px;padding:14px 18px;margin:18px 0 8px;
+    background:var(--panel);border:1px solid var(--rule);border-radius:12px;font-size:14px}
+  .meta div{color:var(--ink2)} .meta b{color:var(--ink)}
+
+  .card{background:var(--panel);border:1px solid var(--rule);border-radius:14px;
+    padding:18px 20px;margin:18px 0}
+  .card.warn{border-color:var(--amber);background:#231d0e}
+  .card.bad{border-color:var(--red);background:#2a1620}
+  .card.good{border-color:var(--green);background:#0f2a22}
+  .card h4{margin:0 0 8px;font-size:15px;color:var(--ink)}
+
+  /* ---------- the step flow ---------- */
+  .flow{margin:22px 0 8px}
+  .step{display:grid;grid-template-columns:44px 1fr;gap:16px;position:relative;
+    padding-bottom:20px}
+  .step:last-child{padding-bottom:0}
+  .step::before{content:"";position:absolute;left:21px;top:38px;bottom:0;width:2px;
+    background:var(--rule)}
+  .step:last-child::before{display:none}
+  .step .num{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;
+    font-family:var(--mono);font-weight:700;font-size:16px;
+    background:var(--panel2);border:2px solid var(--rule);color:var(--ink);z-index:1}
+  .step.tool .num{border-color:var(--teal);color:var(--teal)}
+  .step.script .num{border-color:var(--violet);color:var(--violet)}
+  .step.wrong .num{border-color:var(--red);color:var(--red)}
+  .step.turn .num{border-color:var(--amber);color:var(--amber)}
+  .step .body{padding-top:6px}
+  .step .body h4{margin:0 0 4px;font-size:16.5px}
+  .step .body p{margin:0 0 8px;font-size:15px}
+  .tag{display:inline-block;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+    font-weight:700;padding:2px 8px;border-radius:99px;margin-left:8px;vertical-align:2px}
+  .tag.tool{background:#0d3b36;color:var(--teal)}
+  .tag.script{background:#2a1f4d;color:var(--violet)}
+  .tag.wrong{background:#3a1520;color:var(--red)}
+
+  /* ---------- comparison bars ---------- */
+  .bars{margin:14px 0}
+  .brow{display:grid;grid-template-columns:minmax(120px,190px) 1fr 76px;gap:12px;
+    align-items:center;margin-bottom:7px;font-size:14px}
+  .brow .lb{color:var(--ink2);text-align:right}
+  .brow .tr{background:#ffffff10;border-radius:6px;height:22px;position:relative;overflow:hidden}
+  .brow .fl{height:100%;border-radius:6px}
+  .brow .vl{font-family:var(--mono);font-size:13.5px;text-align:right;color:var(--ink)}
+  .baseline{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink3);z-index:2}
+  .baseline span{position:absolute;top:-17px;left:5px;font-size:10.5px;color:var(--ink3);
+    white-space:nowrap}
+
+  /* ---------- the generation diagram ---------- */
+  .gen{margin:20px 0 6px}
+  .genrow{display:grid;grid-template-columns:112px 1fr;gap:14px;align-items:center;
+    margin-bottom:9px}
+  .genrow .yr{text-align:right;font-size:14px;color:var(--ink2)}
+  .genrow .yr b{display:block;font-family:var(--mono);font-size:18px;color:var(--ink)}
+  .track{display:flex;height:40px;border-radius:8px;overflow:hidden}
+  .seg{display:grid;place-items:center;font-size:12.5px;font-weight:700;
+    color:#0b102a;padding:0 6px;text-align:center;line-height:1.15}
+  .seg small{display:block;font-weight:600;opacity:.8;font-size:10.5px}
+  .genkey{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:12px;font-size:13px;
+    color:var(--ink2)}
+  .genkey i{display:inline-block;width:12px;height:12px;border-radius:3px;
+    margin-right:6px;vertical-align:-1px}
+
+  /* ---------- case transcripts ---------- */
+  .case{background:#0d1330;border:1px solid var(--rule);border-radius:12px;
+    padding:16px 18px;margin:16px 0;font-size:14.5px}
+  .case .q{color:var(--ink);font-weight:600;margin:0 0 4px}
+  .case .gold{font-family:var(--mono);font-size:13px;color:var(--amber);margin-bottom:12px}
+  .arms{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:720px){.arms{grid-template-columns:1fr}}
+  .arm{background:#111838;border:1px solid var(--rule);border-radius:10px;padding:11px 13px}
+  .arm h5{margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink3)}
+  .ans{font-family:var(--mono);font-size:12.8px;padding:3px 0;color:var(--ink2);
+    display:flex;gap:8px}
+  .ans i{font-style:normal;width:14px;flex:none}
+  .ans.ok i{color:var(--green)} .ans.no i{color:var(--red)}
+  .dis{margin-top:9px;padding-top:8px;border-top:1px solid var(--rule);
+    font-size:12.5px;font-family:var(--mono)}
+  .dis.caught{color:var(--green)} .dis.silent{color:var(--red)}
+
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:14px}
+  th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--rule)}
+  th{color:var(--ink3);font-size:12px;letter-spacing:.05em;text-transform:uppercase}
+  td.n{font-family:var(--mono);text-align:right}
+  .react{border-left:3px solid var(--amber);background:#231d0e88;padding:13px 17px;
+    margin:18px 0;border-radius:0 10px 10px 0}
+  .react b{color:var(--amber)}
+  .toc{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0 4px}
+  .toc a{display:inline-block;padding:7px 14px;border:1px solid var(--rule);
+    border-radius:99px;text-decoration:none;color:var(--ink2);font-size:14px}
+  .toc a:hover{border-color:var(--teal);color:var(--ink)}
+  hr{border:0;border-top:1px solid var(--rule);margin:44px 0}
+  .err{padding:16px;border:1px solid var(--amber);border-radius:10px;background:#231d0e;
+    color:var(--amber);font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><!--baked:app-->
+  <div class="eyebrow">FaultLines · discovery walkthroughs</div>
+  <h1>How someone else would find it</h1>
+  <p class="lede">Two documented paths through the tool that reach a finding a table
+    of averages does not show. Each states what you click, what you see, and — the
+    part that matters — where the obvious reading turns out to be wrong.</p>
+
+  <div class="meta">
+    <div>Shivani Bokka · M.S. Data Science &amp; AI · SFSU</div>
+    <div>Advisor: <b>Dr. Shahrukh Humayoun</b></div>
+    <div><b>34,062</b> questions · <b>950</b> blind spots</div>
+  </div>
+
+  <div class="toc">
+    <a href="#w1">1 · The same question, twice, with one thing changed</a>
+    <a href="#w2">2 · The warning light went out</a>
+    <a href="#numbers">Every number, and its source</a>
+    <a href="index.html">← the results deck</a>
+  </div>
+
+  <div class="card">
+    <h4>How to read the step badges</h4>
+    <p style="margin:0"><span class="tag tool">in the tool</span> you can do this by
+      clicking. <span class="tag script">script</span> this step is offline analysis —
+      the tool generates the hypothesis and cannot confirm it, and saying so is part
+      of the claim. <span class="tag wrong">wrong turn</span> a reading that looks
+      right and is not; both walkthroughs are built around one.</p>
+  </div>
+
+  <hr>
+
+  <h2 id="w1">1 · The same question, twice, with one thing changed</h2>
+  <div class="meta">
+    <div>Task <b>T3</b> — are the failures scattered, or concentrated?</div>
+    <div>Persona <b>P1</b>, the engineer</div>
+    <div>Views <b>map → inspector</b></div>
+    <div>~6 minutes</div>
+  </div>
+  <p>A table tells you <em>how many</em> blind spots there are. It cannot tell you
+    whether they are anywhere in particular — and that is the difference between
+    “2.8% of our questions fail silently”, which sounds like a
+    rounding error you accept, and “our failures have a describable shape”, which is
+    something you can route around.</p>
+
+  <div class="flow">
+    <div class="step tool"><div class="num">1</div><div class="body">
+    <h4>Open the tool. Touch nothing.<span class="tag tool">in the tool</span></h4><p>Tab 1 loads coloured by <b>All agreed &amp; all wrong</b>:
+       <b class="mono" style="color:var(--red)">950</b> red dots against
+       <b class="mono">33,112</b> grey ones. The map places questions by
+       wording alone, so a clump is roughly a topic.</p></div></div>
+    <div class="step tool"><div class="num">2</div><div class="body">
+    <h4>Are the red dots even?<span class="tag tool">in the tool</span></h4><p>No — and the size of the effect matters. Blind spots sit <b>closer to one
+       another than chance</b>: the average distance to the nearest other blind spot is
+       shorter than for a random sample of the same size, by a modest margin.</p>
+       <p class="muted" style="font-size:14px">Real, and modest. This does <b>not</b> say
+       “tightly clustered”. It says “not uniform” — enough to justify looking.</p></div></div>
+    <div class="step tool"><div class="num">3</div><div class="body">
+    <h4>Drag a box round a dense knot. Open tab 2.<span class="tag tool">in the tool</span></h4><p>A blue bar appears — <span class="mono">Showing only the N cases inside the box
+       you drew on the map</span> — and the tab badge shows how many. <b>The number
+       depends on where you dragged</b>, so it will not match anyone else's.</p>
+       <div class="card" style="margin:10px 0">
+         <h4>Use this link instead if you want the same screen I had</h4>
+         <p style="margin:0 0 10px;font-size:14.5px">Every view in the tool now has an
+         address. This one is the box round the film-attribution region:
+         <b>72 cases</b>, of which <b>28</b> are <span class="mono">Who was the director
+         of X?</span></p>
+         <a class="mono" style="font-size:13px;word-break:break-all"
+            href="https://faultlines-tool.vercel.app/#c=blind&amp;b=3.17,12.45,4.57,13.93"
+            target="_blank" rel="noopener">https://faultlines-tool.vercel.app/#c=blind&amp;b=3.17,12.45,4.57,13.93</a>
+       </div>
+       <p><b>What you actually see is a mix</b>, and the mix is the observation. Not every
+       question is the same sentence — you get film people, film titles, and questions
+       about who made what:</p>
+       <div class="card" style="margin:10px 0"><div class="mono" style="font-size:13px;color:var(--ink2)">
+       Which film maker was born first, Alfred Santell or Aleksei Balabanov?<br>
+       Are Dalton Trumbo and Herman Wouk both screenwriters?<br>
+       Who was the director of The Town?<br>
+       Between Jack Conway and George Dunning, who was more active in animation films?<br>
+       Who was the director of Glass?</div></div>
+       <p>They are not one template. They are all <b>attribute-of-a-named-work</b>
+       questions — <i>who made this thing called X</i>. That is the hypothesis, and it
+       survives wherever in this region you happen to drag.</p></div></div>
+    <div class="step wrong"><div class="num">4</div><div class="body">
+    <h4>Count blind spots per pattern — and get it wrong<span class="tag wrong">wrong turn</span></h4><p>The tempting move is to count. The second-biggest count turns out to be
+       <b>safer than average</b>: there are simply a lot of those questions.
+       <b>A count is not a rate.</b></p>
+       <div class="bars"><div class="brow">
+      <div class="lb">director of X<br><span class="muted mono" style="font-size:11.5px">n=2,002</span></div>
+      <div class="tr"><div class="fl" style="width:100%;
+        background:linear-gradient(90deg,#f87171,#f472b6)"></div>
+        <div class="baseline" style="left:53.24427480916031%">
+          <span>corpus average 2.79%</span></div></div>
+      <div class="vl" style="color:var(--red)">5.24%</div>
+    </div><div class="brow">
+      <div class="lb">genre of X<br><span class="muted mono" style="font-size:11.5px">n=1,596</span></div>
+      <div class="tr"><div class="fl" style="width:83.77862595419847%;
+        background:linear-gradient(90deg,#f87171,#f472b6)"></div>
+        <div class="baseline" style="left:53.24427480916031%">
+          </div></div>
+      <div class="vl" style="color:var(--red)">4.39%</div>
+    </div><div class="brow">
+      <div class="lb">birthplace of X<br><span class="muted mono" style="font-size:11.5px">n=585</span></div>
+      <div class="tr"><div class="fl" style="width:78.2442748091603%;
+        background:linear-gradient(90deg,#f87171,#f472b6)"></div>
+        <div class="baseline" style="left:53.24427480916031%">
+          </div></div>
+      <div class="vl" style="color:var(--red)">4.10%</div>
+    </div><div class="brow">
+      <div class="lb">author of X<br><span class="muted mono" style="font-size:11.5px">n=1,495</span></div>
+      <div class="tr"><div class="fl" style="width:75.38167938931298%;
+        background:linear-gradient(90deg,#f87171,#f472b6)"></div>
+        <div class="baseline" style="left:53.24427480916031%">
+          </div></div>
+      <div class="vl" style="color:var(--red)">3.95%</div>
+    </div><div class="brow">
+      <div class="lb">crew role of X<br><span class="muted mono" style="font-size:11.5px">n=4,197</span></div>
+      <div class="tr"><div class="fl" style="width:34.541984732824424%;
+        background:#3a4472"></div>
+        <div class="baseline" style="left:53.24427480916031%">
+          </div></div>
+      <div class="vl" style="color:var(--ink3)">1.81%</div>
+    </div><div class="brow">
+      <div class="lb">capital of X<br><span class="muted mono" style="font-size:11.5px">n=656</span></div>
+      <div class="tr"><div class="fl" style="width:29.00763358778626%;
+        background:#3a4472"></div>
+        <div class="baseline" style="left:53.24427480916031%">
+          </div></div>
+      <div class="vl" style="color:var(--ink3)">1.52%</div>
+    </div></div></div></div>
+    <div class="step script"><div class="num">5</div><div class="body">
+    <h4>Ask why the cool pattern is cool<span class="tag script">script</span></h4><p><span class="mono">crew role of X</span> is the
+       <b>most-wrong of these six patterns</b> —
+       69.0% of its answers are wrong — and one of the
+       least blind. The models agree on only
+       <b>8.1%</b> of them.</p>
+       <table><tr><th>pattern</th><th style="text-align:right">wrong</th>
+       <th style="text-align:right">all four agreed</th><th style="text-align:right">blind</th></tr>
+       <tr>
+         <td>crew role of X</td><td class="n">69.0%</td>
+         <td class="n">8.1%</td>
+         <td class="n">1.81%</td></tr><tr>
+         <td>director of X</td><td class="n">62.4%</td>
+         <td class="n">16.9%</td>
+         <td class="n">5.24%</td></tr><tr>
+         <td>capital of X</td><td class="n">10.8%</td>
+         <td class="n">73.2%</td>
+         <td class="n">1.52%</td></tr></table>
+       <p><b>The blind-spot rate does not track how often they are wrong. It tracks how
+       often they are wrong <em>together</em>.</b> One possible reason, not tested: nobody famous is attached to a film’s
+       producer, so the models guess — and guess differently. Disagreement catches them.</p></div></div>
+    <div class="step tool"><div class="num">6</div><div class="body">
+    <h4>Switch the colouring to “Is the name shared?”<span class="tag tool">in the tool</span></h4><p style="margin-bottom:10px"><a class="mono" style="font-size:13px"
+         href="https://faultlines-tool.vercel.app/#c=name" target="_blank" rel="noopener">open this view →</a>
+         <span class="muted"> — no dragging, identical for everyone</span></p>
+       <p>Wikipedia keeps the bare name as an article title unless something else already
+       owns it — <span class="mono">Glass (2019 film)</span>. A qualified title <i>is</i>
+       the collision, with no judgement involved. Now hold the question form fixed:</p>
+       <div class="bars"><div class="brow">
+      <div class="lb">title is UNIQUE<br><span class="muted mono" style="font-size:11.5px">n=508</span></div>
+      <div class="tr"><div class="fl" style="width:14.432989690721648%;background:#3a4472"></div>
+        <div class="baseline" style="left:41.08983799705449%"></div></div>
+      <div class="vl">0.98%</div></div><div class="brow">
+      <div class="lb">title is TAKEN<br><span class="muted mono" style="font-size:11.5px">n=1,472</span></div>
+      <div class="tr"><div class="fl" style="width:100%;background:linear-gradient(90deg,#f87171,#f472b6)"></div>
+        <div class="baseline" style="left:41.08983799705449%"></div></div>
+      <div class="vl">6.79%</div></div></div>
+       <p>Same wording. Same task. Same four models. Same dataset.
+       <b>One variable — whether the title is shared — moves the blind-spot rate
+       6.9×</b>, and the unique-name group is
+       <em>safer</em> than the corpus average.</p>
+       <p class="muted">The tool's legend shows about 3.1× over all PopQA questions
+       with a Wikipedia title (4.7% vs 1.5%); the 6.9× here
+       holds the question form fixed and was computed by script.</p></div></div>
+    <div class="step tool"><div class="num">7</div><div class="body">
+    <h4>Click one and read it<span class="tag tool">in the tool</span></h4><div class="case">
+    <p class="q">Who was the director of The Town?</p>
+    <div class="gold">gold answer — Mike Bartlett</div>
+    <div class="arms" style="grid-template-columns:1fr">
+      
+      <div class="arm"><h5>all four models</h5>
+    <div class="ans no"><i>✗</i>
+      <span>Llama-4-Maverick — Ben Affleck</span></div><div class="ans no"><i>✗</i>
+      <span>Qwen3-235B — Ben Affleck</span></div><div class="ans no"><i>✗</i>
+      <span>Mistral-Small-3.2 — Ben Affleck</span></div><div class="ans no"><i>✗</i>
+      <span>Gemma-3-27B — Ben Affleck.</span></div>
+    </div>
+    </div>
+    <p style="margin:12px 0 0;font-size:14px">Ben Affleck directed a 2010 <b>film</b> called <i>The Town</i>. Mike Bartlett created a 2012 <b>television series</b> called <i>The Town</i>. The question does not say which.</p>
+    
+  </div></div></div>
+  </div>
+
+  <div class="react"><b>WRITE THIS DOWN — 1.</b> Before reading the note under that case:
+    what do you think happened? Whatever you write is the honest reaction, and it is the
+    sentence a reader will believe.</div>
+
+  <p>Four more from the same clumps. The last one is not a model error at all:</p>
+  <table><tr><th>question</th><th>all four models said</th><th>the key says</th></tr>
+    <tr><td>Who was the director of <b>The Ring</b>?</td>
+      <td class="mono" style="color:var(--red)">Gore Verbinski</td>
+      <td class="mono" style="color:var(--amber)">Trey Parker</td></tr><tr><td>Who was the director of <b>Glass</b>?</td>
+      <td class="mono" style="color:var(--red)">M. Night Shyamalan</td>
+      <td class="mono" style="color:var(--amber)">Chris Kennedy</td></tr><tr><td>In what city was <b>Robin Williams</b> born?</td>
+      <td class="mono" style="color:var(--red)">Chicago</td>
+      <td class="mono" style="color:var(--amber)">Christchurch</td></tr><tr><td>What is the currency of <b>Lithuania</b>?</td>
+      <td class="mono" style="color:var(--red)">Euro</td>
+      <td class="mono" style="color:var(--amber)">Litas</td></tr>
+  </table>
+  <p>The famous Robin Williams <em>was</em> born in Chicago. And Lithuania adopted the
+    euro in 2015 — <b>the models are right and the answer key is stale.</b></p>
+
+  <div class="card good">
+    <h4>What this path reaches</h4>
+    <p style="margin:0"><b>A third failure mechanism.</b> The project had <i>obscurity</i>
+      (never learned it) and <i>misconception</i> (learned something false). This is
+      neither: the model knows the fact and <b>attaches it to the wrong referent</b>.
+      A plausible explanation, not tested directly: every model resolves toward fame
+      because the famous one dominates the web they learned from — so they fail <b>identically</b>, which is exactly the
+      condition disagreement cannot see.</p>
+  </div>
+
+  <div class="card warn">
+    <h4>And the limitation, on the same path</h4>
+    <p style="margin:0 0 8px">Some of these are <b>not model errors</b>. The honest
+      statement of the 950 is: questions where every model agreed and every
+      model was <em>marked</em> wrong — some genuine shared failures, some ambiguous
+      questions where the models chose a defensible different referent, a few stale or
+      over-strict keys.</p>
+    <p style="margin:0"><b>This is a strength, not a hole.</b> It is the benchmark
+      curator’s question arriving unbidden while running the engineer’s. One path, two
+      tasks, and the second was not designed for. The 54 answer-key flags
+      bound part of it, but they only catch <em>shorter-form</em> answers — nothing
+      automatic catches “right about a different Robin Williams”.</p>
+  </div>
+
+  <div class="react"><b>WRITE THIS DOWN — 2.</b> Does the 950 feel weaker to
+    you now, or does the tool feel stronger? That sentence, in your words, is the core of
+    the limitations chapter.</div>
+
+  <hr>
+
+  <h2 id="w2">2 · The warning light went out</h2>
+  <div class="meta">
+    <div>Task <b>T5</b> — does an upgrade fix it, and would I still see it if not?</div>
+    <div>Persona <b>P2</b>, the safety researcher</div>
+    <div>Views <b>generation diff → inspector</b></div>
+    <div>~8 minutes</div>
+  </div>
+  <p><b>This is the path the tool exists for.</b> Every other finding in the project
+    could be a static figure. This one cannot: it needs one question held fixed while the
+    model generation changes, and the interesting cases are individually surprising
+    rather than statistically summarisable.</p>
+
+  <div class="gen">
+    <div class="genrow"><div class="yr">2024 models<b>823</b></div>
+      <div class="track">
+        <div class="seg" style="flex:503;background:#34d399">503<small>now visible</small></div>
+        <div class="seg" style="flex:320;background:#fbbf24">320<small>hidden in both</small></div>
+        <div style="flex:630"></div>
+      </div></div>
+    <div class="genrow"><div class="yr">2025 models<b>950</b></div>
+      <div class="track">
+        <div style="flex:503"></div>
+        <div class="seg" style="flex:320;background:#fbbf24">320<small>hidden in both</small></div>
+        <div class="seg" style="flex:630;background:#f87171">630<small>newly hidden</small></div>
+      </div></div>
+    <div class="genkey">
+      <span><i style="background:#34d399"></i>blind in 2024 only — a check can catch them now</span>
+      <span><i style="background:#fbbf24"></i>blind in both years</span>
+      <span><i style="background:#f87171"></i>blind in 2025 only — a check could catch them before</span>
+    </div></div>
+  <p class="muted" style="font-size:14px">The same 34,062 questions, asked
+    of both generations. The two bars share the 320 in the middle. The
+    headline is the width difference on the right:
+    <b style="color:var(--red)">2.0× newly hidden for
+    every one inherited</b>.</p>
+
+  <div class="flow">
+    <div class="step wrong"><div class="num">1</div><div class="body">
+    <h4>Notice the sentence you want to write — and do not write it<span class="tag wrong">wrong turn</span></h4><p>The obvious reading of <b>630 newly hidden</b> is
+       <i>“the newer models broke 630 things.”</i> That sentence is wrong,
+       and the next three steps are about why. Hold on to it — it is the reading almost
+       every reader arrives with, and watching it fail is the point of this path.</p></div></div>
+    <div class="step tool"><div class="num">2</div><div class="body">
+    <h4>Click “read these →” on newly hidden<span class="tag tool">in the tool</span></h4><div class="case">
+    <p class="q">Who was the most important player of a Dutch professional football club that Bozidar Sencar played 3 years in before his retirement?</p>
+    <div class="gold">gold answer — Antoon 'Rat' Verlegh</div>
+    <div class="arms" >
+      <div class="arm"><h5>2024 models</h5>
+    <div class="ans no"><i>✗</i>
+      <span>Llama-3.1-8B — Ruud Krol</span></div><div class="ans no"><i>✗</i>
+      <span>Qwen2.5-7B — Klaas-Jan Huntelaar</span></div><div class="ans no"><i>✗</i>
+      <span>Mistral-7B — Dennis Bergkamp</span></div><div class="ans no"><i>✗</i>
+      <span>Gemma-2-9B — Johan Cruyff</span></div>
+    <div class="dis caught">disagreement 0.75 —
+      A CHECK CATCHES IT</div></div>
+      <div class="arm"><h5>2025 models</h5>
+    <div class="ans no"><i>✗</i>
+      <span>Llama-4-Maverick — Johan Cruyff, Ajax.</span></div><div class="ans no"><i>✗</i>
+      <span>Qwen3-235B — Johan Cruyff</span></div><div class="ans no"><i>✗</i>
+      <span>Mistral-Small-3.2 — Johan Cruyff</span></div><div class="ans no"><i>✗</i>
+      <span>Gemma-3-27B — Johan Cruyff.</span></div>
+    <div class="dis silent">disagreement 0.00 —
+      NOTHING FLAGS IT</div></div>
+    </div>
+    
+    
+  </div><p>Neither column has the right answer. In 2024 they produced <b>four different
+       famous Dutch footballers</b> — four guesses. In 2025 they produced <b>one</b>: the
+       most famous Dutch footballer there is.</p>
+       <p><b>They did not get worse. They got consistent, about the same wrong thing</b> —
+       and consistency is exactly what the warning light detects the absence of.</p></div></div>
+    <div class="step tool"><div class="num">3</div><div class="body">
+    <h4>Read a second, where the mechanism is clearer<span class="tag tool">in the tool</span></h4><div class="case">
+    <p class="q">The Prime Minister of the United Kingdom from 1957 to 1963 led the Conservative Government of the United Kingdom with which other person?</p>
+    <div class="gold">gold answer — Sir Alec Douglas-Home</div>
+    <div class="arms" >
+      <div class="arm"><h5>2024 models</h5>
+    <div class="ans no"><i>✗</i>
+      <span>Llama-3.1-8B — Harold Macmillan</span></div><div class="ans no"><i>✗</i>
+      <span>Qwen2.5-7B — Sir Anthony Eden</span></div><div class="ans no"><i>✗</i>
+      <span>Mistral-7B — Harold Macmillan, Lord Stockton (Note: The title &quot;Lord&quot; was given to him after he left office.)</span></div><div class="ans no"><i>✗</i>
+      <span>Gemma-2-9B — R. A. Butler</span></div>
+    <div class="dis caught">disagreement 0.75 —
+      A CHECK CATCHES IT</div></div>
+      <div class="arm"><h5>2025 models</h5>
+    <div class="ans no"><i>✗</i>
+      <span>Llama-4-Maverick — Harold Macmillan</span></div><div class="ans no"><i>✗</i>
+      <span>Qwen3-235B — Harold Macmillan</span></div><div class="ans no"><i>✗</i>
+      <span>Mistral-Small-3.2 — Harold Macmillan</span></div><div class="ans no"><i>✗</i>
+      <span>Gemma-3-27B — Harold Macmillan.</span></div>
+    <div class="dis silent">disagreement 0.00 —
+      NOTHING FLAGS IT</div></div>
+    </div>
+    
+    
+  </div><p>Harold Macmillan <b>was</b> the Prime Minister from 1957 to 1963. The question
+       asks who <em>else</em>. All four 2025 models answered with the Prime Minister the
+       question describes — the one person it asks them to look past — <b>and made the same
+       misreading, so they agree</b>.</p></div></div>
+    <div class="step script"><div class="num">4</div><div class="body">
+    <h4>Confirm at scale<span class="tag script">script</span></h4><table><tr><th>newly hidden</th><th style="text-align:right">n</th><th style="text-align:right">share</th></tr>
+       <tr><td>already had <b>no</b> correct answer in 2024</td>
+         <td class="n">505</td>
+         <td class="n" style="color:var(--red)">80%</td></tr>
+       <tr><td>had at least one correct answer in 2024</td>
+         <td class="n">125</td><td class="n">20%</td></tr></table>
+       <p><b>80% of the newly hidden were already wrong in
+       2024.</b> Nothing about their correctness changed. They stopped disagreeing, so a
+       check that used to fire now stays silent.</p>
+       <div class="card bad" style="margin:12px 0 0"><p style="margin:0">
+       <b>The axis is detectability, not correctness.</b> Never write “newly broken”,
+       “still broken” or “fixed” for these three categories. They are <i>newly hidden</i>,
+       <i>hidden in both</i> and <i>now visible</i>.</p></div></div></div>
+    <div class="step tool"><div class="num">5</div><div class="body">
+    <h4>Attack the remaining 125 instead of banking them<span class="tag tool">in the tool</span></h4><p>These look like genuine regressions — 2024 had a right answer, 2025 does not.
+       Open a few.</p><div class="case">
+    <p class="q">What is the name of the regional transportation authority that includes the station which is proximal to Cira Centre South?</p>
+    <div class="gold">gold answer — Southeastern Pennsylvania Transportation Authority</div>
+    <div class="arms" >
+      <div class="arm"><h5>2024 models</h5>
+    <div class="ans no"><i>✗</i>
+      <span>Llama-3.1-8B — SEPTA</span></div><div class="ans no"><i>✗</i>
+      <span>Qwen2.5-7B — SEPTA</span></div><div class="ans ok"><i>✓</i>
+      <span>Mistral-7B — SEPTA (Southeastern Pennsylvania Transportation Authority)</span></div><div class="ans no"><i>✗</i>
+      <span>Gemma-2-9B — SEPTA</span></div>
+    </div>
+      <div class="arm"><h5>2025 models</h5>
+    <div class="ans no"><i>✗</i>
+      <span>Llama-4-Maverick — SEPTA</span></div><div class="ans no"><i>✗</i>
+      <span>Qwen3-235B — SEPTA</span></div><div class="ans no"><i>✗</i>
+      <span>Mistral-Small-3.2 — SEPTA</span></div><div class="ans no"><i>✗</i>
+      <span>Gemma-3-27B — SEPTA.</span></div>
+    </div>
+    </div>
+    
+    
+  </div><p>Every model in both years gave <b>the same answer</b>. One 2024 model expanded
+       the acronym and was marked correct. <b>That is not a regression, it is a grading
+       coin-flip.</b> The next one looks like a real regression:</p><div class="case">
+    <p class="q">Who died first, Gheorghe Buzdugan or King Michael?</p>
+    <div class="gold">gold answer — King Michael</div>
+    <div class="arms" >
+      <div class="arm"><h5>2024 models</h5>
+    <div class="ans no"><i>✗</i>
+      <span>Llama-3.1-8B — Gheorghe Buzdugan</span></div><div class="ans no"><i>✗</i>
+      <span>Qwen2.5-7B — Gheorghe Buzdugan</span></div><div class="ans ok"><i>✓</i>
+      <span>Mistral-7B — King Michael (1921-2017) died before Gheorghe Buzdugan (1938-2015).</span></div><div class="ans ok"><i>✓</i>
+      <span>Gemma-2-9B — King Michael</span></div>
+    </div>
+      <div class="arm"><h5>2025 models</h5>
+    <div class="ans no"><i>✗</i>
+      <span>Llama-4-Maverick — Gheorghe Buzdugan</span></div><div class="ans no"><i>✗</i>
+      <span>Qwen3-235B — Gheorghe Buzdugan</span></div><div class="ans no"><i>✗</i>
+      <span>Mistral-Small-3.2 — Gheorghe Buzdugan</span></div><div class="ans no"><i>✗</i>
+      <span>Gemma-3-27B — Gheorghe Buzdugan.</span></div>
+    </div>
+    </div>
+    
+    
+  </div><p>Check the dates before banking it: Gheorghe Buzdugan died in <b>1929</b>, King Michael of Romania in <b>2017</b>. The 2025 models are <b>right</b>; the answer key is wrong. Even the cases that look most like regressions have to be read one by one.</p></div></div>
+    <div class="step script"><div class="num">6</div><div class="body">
+    <h4>So state it as a bound, not a number<span class="tag script">script</span></h4><p>The answer-key flag cannot measure the contamination: it requires <b>every</b>
+       model to have given a short form, and here the whole mechanism is that one did not.
+       It fires on only a handful of the 125 — answering a different question.</p>
+       <p>Two string-similarity heuristics were tried while drafting this and
+       <b>both failed</b>: verbose 2024 answers contain the 2025 wrong answer as a
+       substring, so containment marks genuine regressions as artifacts. Both produced
+       a count; neither was published.</p>
+       <div class="card bad" style="margin:12px 0 0"><p style="margin:0">
+       <b>As graded, at most 125 of 630 newly-hidden cases are genuine
+       regressions</b>, and hand-checking suggests meaningfully fewer. No test in this
+       project reliably measures the contamination — the artifact and the regression are
+       the same string pattern, and only reading the case separates them.</p></div></div></div>
+  </div>
+
+  <div class="react"><b>WRITE THIS DOWN — 3.</b> You have now watched the project’s own
+    numbers get softer twice — 950 in walkthrough 1, 125 here. Does
+    that worry you, or does it read as the tool doing its job?</div>
+
+  <div class="card good">
+    <h4>The two walkthroughs are one finding from two directions</h4>
+    <p><b>Walkthrough 1:</b> at a fixed moment, “director of X” questions whose bare title
+      is already taken on Wikipedia fail silently 6.9× as often
+      as those whose title is unique.<br>
+      <b>Walkthrough 2:</b> in the cases read here, across a generation, models drift <em>toward</em> the famous
+      answer, and their disagreement disappears with it.</p>
+    <p style="margin:0;font-size:17px;color:var(--ink)"><b>The upgrade (newer and larger at once, so the two cannot be separated)
+      mostly did not create new ignorance. It made existing ignorance agree with itself.</b></p>
+  </div>
+
+  <h3>What this proves about the tool — and what it does not</h3>
+  <p><b>Does:</b> steps 2, 3 and 5 of walkthrough 2 are pure interface, and step 1 only
+    reads the tool's generation chart. Holding one question
+    fixed and flipping the generation is not something a table does, and the two cases
+    carrying that path are individually surprising rather than aggregate facts. This is the
+    strongest evidence in the project that the tool is <em>necessary</em> rather than
+    decorative.</p>
+  <p><b>Every step that is a link is exactly reproducible.</b> The tool's whole view —
+    colouring, legend filter, dataset selection, and the box in <em>data</em> coordinates
+    rather than pixels — lives in the URL, so the same link is the same screen on any
+    display at any size. That also fixes something the evaluation needed: three reviewers
+    can be given provably identical starting views instead of three descriptions of one.
+    The <b>Copy link to this view</b> button in the map sidebar makes one from wherever
+    you are.</p>
+  <p><b>Does not:</b> the counts are scripts. The tool shows you <em>a</em> case; it will
+    not tell you how many cases look like that one. That division is legitimate — a
+    visual-analytics tool is judged on supporting <b>discovery</b>, and confirmation is a
+    separate act — but a walkthrough has to say which is which.</p>
+
+  <hr>
+
+  <h2 id="numbers">Every number on this page, and its source</h2>
+  <p>All statistics are read from <span class="mono">summary.json</span> when this page
+    loads. Nothing is typed. Case transcripts are literal quotations of fixed model
+    answers, copied from the tool's <span class="mono">data.json</span> — measurements
+    derive, quotations do not.</p>
+  <table>
+    <tr><th>figure</th><th>value</th><th>source</th></tr>
+    <tr><td>corpus · blind spots</td><td class="n">34,062 · 950</td><td>funnel</td></tr>
+    <tr><td>corpus blind-spot rate</td><td class="n">2.79%</td><td>walk.base</td></tr>
+    <tr><td>director of X — unique title</td><td class="n">0.98% of 508</td><td>walk.director</td></tr>
+    <tr><td>director of X — shared title</td><td class="n">6.79% of 1,472</td><td>walk.director</td></tr>
+    <tr><td>generation split</td><td class="n">503 / 320 / 630</td><td>rq3</td></tr>
+    <tr><td>already all-wrong in 2024</td><td class="n">505 of 630</td><td>walk.emerged</td></tr>
+    <tr><td>answer-key flags</td><td class="n">54</td><td>keyflags</td></tr>
+    <tr><td>defects found and fixed</td><td class="n">78</td><td>ISSUES.md</td></tr>
+  </table>
+  <p class="muted" style="font-size:13.5px">Two figures on this page are not read
+    from summary.json. The <b>72 cases / 28 &ldquo;director of&rdquo;</b> in step 3
+    depend on the box, so they are a property of that one link rather than of the
+    corpus; they were re-derived from <span class="mono">data.json</span> on
+    2026-09-27, after the correction pass removed 8,489 duplicate
+    questions, by applying the same coordinates, and did not move. The clustering
+    measure in step 2 comes from <span class="mono">rq2_localize.parquet</span>,
+    which summary.json does not carry; it used to be typed here as a percentage and
+    two distances, went stale when the duplicates were removed, and is now stated
+    without a number &mdash; the same drift ISSUES #57 recorded for this note a
+    month earlier.</p>
+  <!--/baked:app--></div>
+
+<script>
+/* Every statistic on this page comes from summary.json. Case transcripts are
+   literal, because they are quotations of four fixed model answers rather than
+   measurements -- a quotation that silently changed would be worse than one
+   that went stale. Everything else derives, because a narrative document
+   holding hand-copied numbers is exactly how ISSUES #43/#45/#46/#47/#49
+   happened, five times, in five other files. */
+const CASES = {
+  town: {
+    q: "Who was the director of The Town?", gold: "Mike Bartlett",
+    new: [["Llama-4-Maverick","Ben Affleck",0], ["Qwen3-235B","Ben Affleck",0],
+          ["Mistral-Small-3.2","Ben Affleck",0], ["Gemma-3-27B","Ben Affleck.",0]],
+    note: "Ben Affleck directed a 2010 <b>film</b> called <i>The Town</i>. Mike Bartlett created a 2012 <b>television series</b> called <i>The Town</i>. The question does not say which."
+  },
+  dutch: {
+    q: "Who was the most important player of a Dutch professional football club that Bozidar Sencar played 3 years in before his retirement?",
+    gold: "Antoon 'Rat' Verlegh",
+    old: [["Llama-3.1-8B","Ruud Krol",0], ["Qwen2.5-7B","Klaas-Jan Huntelaar",0],
+          ["Mistral-7B","Dennis Bergkamp",0], ["Gemma-2-9B","Johan Cruyff",0]],
+    new: [["Llama-4-Maverick","Johan Cruyff, Ajax.",0], ["Qwen3-235B","Johan Cruyff",0],
+          ["Mistral-Small-3.2","Johan Cruyff",0], ["Gemma-3-27B","Johan Cruyff.",0]],
+    disOld: "0.75", disNew: "0.00"
+  },
+  pm: {
+    q: "The Prime Minister of the United Kingdom from 1957 to 1963 led the Conservative Government of the United Kingdom with which other person?",
+    gold: "Sir Alec Douglas-Home",
+    old: [["Llama-3.1-8B","Harold Macmillan",0], ["Qwen2.5-7B","Sir Anthony Eden",0],
+          ["Mistral-7B","Harold Macmillan, Lord Stockton (Note: The title &quot;Lord&quot; was given to him after he left office.)",0], ["Gemma-2-9B","R. A. Butler",0]],
+    new: [["Llama-4-Maverick","Harold Macmillan",0], ["Qwen3-235B","Harold Macmillan",0],
+          ["Mistral-Small-3.2","Harold Macmillan",0], ["Gemma-3-27B","Harold Macmillan.",0]],
+    disOld: "0.75", disNew: "0.00"
+  },
+  septa: {
+    q: "What is the name of the regional transportation authority that includes the station which is proximal to Cira Centre South?",
+    gold: "Southeastern Pennsylvania Transportation Authority",
+    old: [["Llama-3.1-8B","SEPTA",0], ["Qwen2.5-7B","SEPTA",0],
+          ["Mistral-7B","SEPTA (Southeastern Pennsylvania Transportation Authority)",1],
+          ["Gemma-2-9B","SEPTA",0]],
+    new: [["Llama-4-Maverick","SEPTA",0], ["Qwen3-235B","SEPTA",0],
+          ["Mistral-Small-3.2","SEPTA",0], ["Gemma-3-27B","SEPTA.",0]]
+  },
+  michael: {
+    q: "Who died first, Gheorghe Buzdugan or King Michael?", gold: "King Michael",
+    old: [["Llama-3.1-8B","Gheorghe Buzdugan",0], ["Qwen2.5-7B","Gheorghe Buzdugan",0],
+          ["Mistral-7B","King Michael (1921-2017) died before Gheorghe Buzdugan (1938-2015).",1],
+          ["Gemma-2-9B","King Michael",1]],
+    new: [["Llama-4-Maverick","Gheorghe Buzdugan",0], ["Qwen3-235B","Gheorghe Buzdugan",0],
+          ["Mistral-Small-3.2","Gheorghe Buzdugan",0], ["Gemma-3-27B","Gheorghe Buzdugan.",0]]
+  }
+};
+const COLLISIONS = [
+  ["Who was the director of <b>The Ring</b>?", "Gore Verbinski", "Trey Parker"],
+  ["Who was the director of <b>Glass</b>?", "M. Night Shyamalan", "Chris Kennedy"],
+  ["In what city was <b>Robin Williams</b> born?", "Chicago", "Christchurch"],
+  ["What is the currency of <b>Lithuania</b>?", "Euro", "Litas"]
+];
+
+/* Same rule as the deck's TOOL_URL: relative on localhost so the walkthrough is
+   testable offline, absolute once deployed, because the tool is a separate Vercel
+   project and a relative path cannot reach it in production. */
+const TOOL = /^(localhost|127\.)/.test(location.hostname)
+  ? '../faultlines-tool/index.html'
+  : 'https://faultlines-tool.vercel.app/';
+
+const n0 = v => v.toLocaleString();
+const pc = (v,d=1) => (v*100).toFixed(d) + "%";
+
+function arm(title, rows, dis, caught){
+  return `<div class="arm"><h5>${title}</h5>
+    ${rows.map(([m,a,ok])=>`<div class="ans ${ok?'ok':'no'}"><i>${ok?'✓':'✗'}</i>
+      <span>${m} — ${a}</span></div>`).join('')}
+    ${dis?`<div class="dis ${caught?'caught':'silent'}">disagreement ${dis} —
+      ${caught?'A CHECK CATCHES IT':'NOTHING FLAGS IT'}</div>`:''}</div>`;
+}
+function caseCard(c, opts={}){
+  const both = c.old && c.new;
+  return `<div class="case">
+    <p class="q">${c.q}</p>
+    <div class="gold">gold answer — ${c.gold}</div>
+    <div class="arms" ${both?'':'style="grid-template-columns:1fr"'}>
+      ${both ? arm('2024 models', c.old, c.disOld, c.disOld==='0.75') : ''}
+      ${arm(both?'2025 models':'all four models', c.new, c.disNew,
+            c.disNew ? c.disNew!=='0.00' : false)}
+    </div>
+    ${c.note?`<p style="margin:12px 0 0;font-size:14px">${c.note}</p>`:''}
+    ${opts.after||''}
+  </div>`;
+}
+function step(n, cls, title, tag, body){
+  return `<div class="step ${cls}"><div class="num">${n}</div><div class="body">
+    <h4>${title}${tag?`<span class="tag ${tag[0]}">${tag[1]}</span>`:''}</h4>${body}</div></div>`;
+}
+
+function render(S){
+  const W = S.walk, F = S.funnel, R3 = S.rq3, base = W.base;
+  const pat = Object.fromEntries(W.patterns.map(p => [p.name, p]));
+  const dirU = W.director.unique, dirS = W.director.shared;
+  const maxRate = Math.max(...W.patterns.map(p=>p.rate));
+  const em = W.emerged, worse = em.n - em.already_allwrong;
+
+  const patBars = W.patterns.slice().sort((a,b)=>b.rate-a.rate).map(p=>{
+    const hot = p.rate > base;
+    return `<div class="brow">
+      <div class="lb">${p.name}<br><span class="muted mono" style="font-size:11.5px">n=${n0(p.n)}</span></div>
+      <div class="tr"><div class="fl" style="width:${p.rate/maxRate*100}%;
+        background:${hot?'linear-gradient(90deg,#f87171,#f472b6)':'#3a4472'}"></div>
+        <div class="baseline" style="left:${base/maxRate*100}%">
+          ${p===W.patterns[0]?'<span>corpus average '+pc(base,2)+'</span>':''}</div></div>
+      <div class="vl" style="color:${hot?'var(--red)':'var(--ink3)'}">${pc(p.rate,2)}</div>
+    </div>`;}).join('');
+
+  const dirMax = Math.max(dirU.rate, dirS.rate);
+  const dirBars = [["title is UNIQUE",dirU,'#3a4472'],["title is TAKEN",dirS,'linear-gradient(90deg,#f87171,#f472b6)']]
+    .map(([lb,d,col])=>`<div class="brow">
+      <div class="lb">${lb}<br><span class="muted mono" style="font-size:11.5px">n=${n0(d.n)}</span></div>
+      <div class="tr"><div class="fl" style="width:${d.rate/dirMax*100}%;background:${col}"></div>
+        <div class="baseline" style="left:${base/dirMax*100}%"></div></div>
+      <div class="vl">${pc(d.rate,2)}</div></div>`).join('');
+
+  // generation diagram: two tracks sharing the 364, aligned on it
+  const total = R3.healed + R3.persisted + R3.emerged;
+  const seg = (n,c,label,sub) =>
+    `<div class="seg" style="flex:${n};background:${c}">${label}<small>${sub}</small></div>`;
+  const genDiagram = `<div class="gen">
+    <div class="genrow"><div class="yr">2024 models<b>${n0(R3.gen2_silent)}</b></div>
+      <div class="track">
+        ${seg(R3.healed,'#34d399',n0(R3.healed),'now visible')}
+        ${seg(R3.persisted,'#fbbf24',n0(R3.persisted),'hidden in both')}
+        <div style="flex:${R3.emerged}"></div>
+      </div></div>
+    <div class="genrow"><div class="yr">2025 models<b>${n0(R3.gen3_silent)}</b></div>
+      <div class="track">
+        <div style="flex:${R3.healed}"></div>
+        ${seg(R3.persisted,'#fbbf24',n0(R3.persisted),'hidden in both')}
+        ${seg(R3.emerged,'#f87171',n0(R3.emerged),'newly hidden')}
+      </div></div>
+    <div class="genkey">
+      <span><i style="background:#34d399"></i>blind in 2024 only — a check can catch them now</span>
+      <span><i style="background:#fbbf24"></i>blind in both years</span>
+      <span><i style="background:#f87171"></i>blind in 2025 only — a check could catch them before</span>
+    </div></div>`;
+
+  document.getElementById('app').innerHTML = `
+  <div class="eyebrow">FaultLines · discovery walkthroughs</div>
+  <h1>How someone else would find it</h1>
+  <p class="lede">Two documented paths through the tool that reach a finding a table
+    of averages does not show. Each states what you click, what you see, and — the
+    part that matters — where the obvious reading turns out to be wrong.</p>
+
+  <div class="meta">
+    <div>Shivani Bokka · M.S. Data Science &amp; AI · SFSU</div>
+    <div>Advisor: <b>Dr. Shahrukh Humayoun</b></div>
+    <div><b>${n0(S.corpus.analysed)}</b> questions · <b>${n0(F.silent)}</b> blind spots</div>
+  </div>
+
+  <div class="toc">
+    <a href="#w1">1 · The same question, twice, with one thing changed</a>
+    <a href="#w2">2 · The warning light went out</a>
+    <a href="#numbers">Every number, and its source</a>
+    <a href="index.html">← the results deck</a>
+  </div>
+
+  <div class="card">
+    <h4>How to read the step badges</h4>
+    <p style="margin:0"><span class="tag tool">in the tool</span> you can do this by
+      clicking. <span class="tag script">script</span> this step is offline analysis —
+      the tool generates the hypothesis and cannot confirm it, and saying so is part
+      of the claim. <span class="tag wrong">wrong turn</span> a reading that looks
+      right and is not; both walkthroughs are built around one.</p>
+  </div>
+
+  <hr>
+
+  <h2 id="w1">1 · The same question, twice, with one thing changed</h2>
+  <div class="meta">
+    <div>Task <b>T3</b> — are the failures scattered, or concentrated?</div>
+    <div>Persona <b>P1</b>, the engineer</div>
+    <div>Views <b>map → inspector</b></div>
+    <div>~6 minutes</div>
+  </div>
+  <p>A table tells you <em>how many</em> blind spots there are. It cannot tell you
+    whether they are anywhere in particular — and that is the difference between
+    “${pc(F.silent/F.total,1)} of our questions fail silently”, which sounds like a
+    rounding error you accept, and “our failures have a describable shape”, which is
+    something you can route around.</p>
+
+  <div class="flow">
+    ${step(1,'tool','Open the tool. Touch nothing.',['tool','in the tool'],
+      `<p>Tab 1 loads coloured by <b>All agreed &amp; all wrong</b>:
+       <b class="mono" style="color:var(--red)">${n0(F.silent)}</b> red dots against
+       <b class="mono">${n0(F.total-F.silent)}</b> grey ones. The map places questions by
+       wording alone, so a clump is roughly a topic.</p>`)}
+    ${step(2,'tool','Are the red dots even?',['tool','in the tool'],
+      `<p>No — and the size of the effect matters. Blind spots sit <b>closer to one
+       another than chance</b>: the average distance to the nearest other blind spot is
+       shorter than for a random sample of the same size, by a modest margin.</p>
+       <p class="muted" style="font-size:14px">Real, and modest. This does <b>not</b> say
+       “tightly clustered”. It says “not uniform” — enough to justify looking.</p>`)}
+    ${step(3,'tool','Drag a box round a dense knot. Open tab 2.',['tool','in the tool'],
+      `<p>A blue bar appears — <span class="mono">Showing only the N cases inside the box
+       you drew on the map</span> — and the tab badge shows how many. <b>The number
+       depends on where you dragged</b>, so it will not match anyone else's.</p>
+       <div class="card" style="margin:10px 0">
+         <h4>Use this link instead if you want the same screen I had</h4>
+         <p style="margin:0 0 10px;font-size:14.5px">Every view in the tool now has an
+         address. This one is the box round the film-attribution region:
+         <b>72 cases</b>, of which <b>28</b> are <span class="mono">Who was the director
+         of X?</span></p>
+         <a class="mono" style="font-size:13px;word-break:break-all"
+            href="${TOOL}#c=blind&amp;b=3.17,12.45,4.57,13.93"
+            target="_blank" rel="noopener">${TOOL}#c=blind&amp;b=3.17,12.45,4.57,13.93</a>
+       </div>
+       <p><b>What you actually see is a mix</b>, and the mix is the observation. Not every
+       question is the same sentence — you get film people, film titles, and questions
+       about who made what:</p>
+       <div class="card" style="margin:10px 0"><div class="mono" style="font-size:13px;color:var(--ink2)">
+       Which film maker was born first, Alfred Santell or Aleksei Balabanov?<br>
+       Are Dalton Trumbo and Herman Wouk both screenwriters?<br>
+       Who was the director of The Town?<br>
+       Between Jack Conway and George Dunning, who was more active in animation films?<br>
+       Who was the director of Glass?</div></div>
+       <p>They are not one template. They are all <b>attribute-of-a-named-work</b>
+       questions — <i>who made this thing called X</i>. That is the hypothesis, and it
+       survives wherever in this region you happen to drag.</p>`)}
+    ${step(4,'wrong','Count blind spots per pattern — and get it wrong',['wrong','wrong turn'],
+      `<p>The tempting move is to count. The second-biggest count turns out to be
+       <b>safer than average</b>: there are simply a lot of those questions.
+       <b>A count is not a rate.</b></p>
+       <div class="bars">${patBars}</div>`)}
+    ${step(5,'script','Ask why the cool pattern is cool',['script','script'],
+      `<p><span class="mono">${pat['crew role of X'].name}</span> is the
+       <b>most-wrong of these six patterns</b> —
+       ${pc(pat['crew role of X'].wrong,1)} of its answers are wrong — and one of the
+       least blind. The models agree on only
+       <b>${pc(pat['crew role of X'].unanimous,1)}</b> of them.</p>
+       <table><tr><th>pattern</th><th style="text-align:right">wrong</th>
+       <th style="text-align:right">all four agreed</th><th style="text-align:right">blind</th></tr>
+       ${['crew role of X','director of X','capital of X'].map(k=>`<tr>
+         <td>${k}</td><td class="n">${pc(pat[k].wrong,1)}</td>
+         <td class="n">${pc(pat[k].unanimous,1)}</td>
+         <td class="n">${pc(pat[k].rate,2)}</td></tr>`).join('')}</table>
+       <p><b>The blind-spot rate does not track how often they are wrong. It tracks how
+       often they are wrong <em>together</em>.</b> One possible reason, not tested: nobody famous is attached to a film’s
+       producer, so the models guess — and guess differently. Disagreement catches them.</p>`)}
+    ${step(6,'tool','Switch the colouring to “Is the name shared?”',['tool','in the tool'],
+      `<p style="margin-bottom:10px"><a class="mono" style="font-size:13px"
+         href="${TOOL}#c=name" target="_blank" rel="noopener">open this view →</a>
+         <span class="muted"> — no dragging, identical for everyone</span></p>
+       <p>Wikipedia keeps the bare name as an article title unless something else already
+       owns it — <span class="mono">Glass (2019 film)</span>. A qualified title <i>is</i>
+       the collision, with no judgement involved. Now hold the question form fixed:</p>
+       <div class="bars">${dirBars}</div>
+       <p>Same wording. Same task. Same four models. Same dataset.
+       <b>One variable — whether the title is shared — moves the blind-spot rate
+       ${(dirS.rate/dirU.rate).toFixed(1)}×</b>, and the unique-name group is
+       <em>safer</em> than the corpus average.</p>
+       <p class="muted">The tool's legend shows about 3.1× over all PopQA questions
+       with a Wikipedia title (4.7% vs 1.5%); the ${(dirS.rate/dirU.rate).toFixed(1)}× here
+       holds the question form fixed and was computed by script.</p>`)}
+    ${step(7,'tool','Click one and read it',['tool','in the tool'], caseCard(CASES.town))}
+  </div>
+
+  <div class="react"><b>WRITE THIS DOWN — 1.</b> Before reading the note under that case:
+    what do you think happened? Whatever you write is the honest reaction, and it is the
+    sentence a reader will believe.</div>
+
+  <p>Four more from the same clumps. The last one is not a model error at all:</p>
+  <table><tr><th>question</th><th>all four models said</th><th>the key says</th></tr>
+    ${COLLISIONS.map(([q,a,g])=>`<tr><td>${q}</td>
+      <td class="mono" style="color:var(--red)">${a}</td>
+      <td class="mono" style="color:var(--amber)">${g}</td></tr>`).join('')}
+  </table>
+  <p>The famous Robin Williams <em>was</em> born in Chicago. And Lithuania adopted the
+    euro in 2015 — <b>the models are right and the answer key is stale.</b></p>
+
+  <div class="card good">
+    <h4>What this path reaches</h4>
+    <p style="margin:0"><b>A third failure mechanism.</b> The project had <i>obscurity</i>
+      (never learned it) and <i>misconception</i> (learned something false). This is
+      neither: the model knows the fact and <b>attaches it to the wrong referent</b>.
+      A plausible explanation, not tested directly: every model resolves toward fame
+      because the famous one dominates the web they learned from — so they fail <b>identically</b>, which is exactly the
+      condition disagreement cannot see.</p>
+  </div>
+
+  <div class="card warn">
+    <h4>And the limitation, on the same path</h4>
+    <p style="margin:0 0 8px">Some of these are <b>not model errors</b>. The honest
+      statement of the ${n0(F.silent)} is: questions where every model agreed and every
+      model was <em>marked</em> wrong — some genuine shared failures, some ambiguous
+      questions where the models chose a defensible different referent, a few stale or
+      over-strict keys.</p>
+    <p style="margin:0"><b>This is a strength, not a hole.</b> It is the benchmark
+      curator’s question arriving unbidden while running the engineer’s. One path, two
+      tasks, and the second was not designed for. The ${n0(S.keyflags)} answer-key flags
+      bound part of it, but they only catch <em>shorter-form</em> answers — nothing
+      automatic catches “right about a different Robin Williams”.</p>
+  </div>
+
+  <div class="react"><b>WRITE THIS DOWN — 2.</b> Does the ${n0(F.silent)} feel weaker to
+    you now, or does the tool feel stronger? That sentence, in your words, is the core of
+    the limitations chapter.</div>
+
+  <hr>
+
+  <h2 id="w2">2 · The warning light went out</h2>
+  <div class="meta">
+    <div>Task <b>T5</b> — does an upgrade fix it, and would I still see it if not?</div>
+    <div>Persona <b>P2</b>, the safety researcher</div>
+    <div>Views <b>generation diff → inspector</b></div>
+    <div>~8 minutes</div>
+  </div>
+  <p><b>This is the path the tool exists for.</b> Every other finding in the project
+    could be a static figure. This one cannot: it needs one question held fixed while the
+    model generation changes, and the interesting cases are individually surprising
+    rather than statistically summarisable.</p>
+
+  ${genDiagram}
+  <p class="muted" style="font-size:14px">The same ${n0(S.corpus.analysed)} questions, asked
+    of both generations. The two bars share the ${n0(R3.persisted)} in the middle. The
+    headline is the width difference on the right:
+    <b style="color:var(--red)">${(R3.emerged/R3.persisted).toFixed(1)}× newly hidden for
+    every one inherited</b>.</p>
+
+  <div class="flow">
+    ${step(1,'wrong','Notice the sentence you want to write — and do not write it',['wrong','wrong turn'],
+      `<p>The obvious reading of <b>${n0(R3.emerged)} newly hidden</b> is
+       <i>“the newer models broke ${n0(R3.emerged)} things.”</i> That sentence is wrong,
+       and the next three steps are about why. Hold on to it — it is the reading almost
+       every reader arrives with, and watching it fail is the point of this path.</p>`)}
+    ${step(2,'tool','Click “read these →” on newly hidden',['tool','in the tool'],
+      caseCard(CASES.dutch) +
+      `<p>Neither column has the right answer. In 2024 they produced <b>four different
+       famous Dutch footballers</b> — four guesses. In 2025 they produced <b>one</b>: the
+       most famous Dutch footballer there is.</p>
+       <p><b>They did not get worse. They got consistent, about the same wrong thing</b> —
+       and consistency is exactly what the warning light detects the absence of.</p>`)}
+    ${step(3,'tool','Read a second, where the mechanism is clearer',['tool','in the tool'],
+      caseCard(CASES.pm) +
+      `<p>Harold Macmillan <b>was</b> the Prime Minister from 1957 to 1963. The question
+       asks who <em>else</em>. All four 2025 models answered with the Prime Minister the
+       question describes — the one person it asks them to look past — <b>and made the same
+       misreading, so they agree</b>.</p>`)}
+    ${step(4,'script','Confirm at scale',['script','script'],
+      `<table><tr><th>newly hidden</th><th style="text-align:right">n</th><th style="text-align:right">share</th></tr>
+       <tr><td>already had <b>no</b> correct answer in 2024</td>
+         <td class="n">${n0(em.already_allwrong)}</td>
+         <td class="n" style="color:var(--red)">${pc(em.already_allwrong/em.n,0)}</td></tr>
+       <tr><td>had at least one correct answer in 2024</td>
+         <td class="n">${n0(worse)}</td><td class="n">${pc(worse/em.n,0)}</td></tr></table>
+       <p><b>${pc(em.already_allwrong/em.n,0)} of the newly hidden were already wrong in
+       2024.</b> Nothing about their correctness changed. They stopped disagreeing, so a
+       check that used to fire now stays silent.</p>
+       <div class="card bad" style="margin:12px 0 0"><p style="margin:0">
+       <b>The axis is detectability, not correctness.</b> Never write “newly broken”,
+       “still broken” or “fixed” for these three categories. They are <i>newly hidden</i>,
+       <i>hidden in both</i> and <i>now visible</i>.</p></div>`)}
+    ${step(5,'tool','Attack the remaining '+n0(worse)+' instead of banking them',['tool','in the tool'],
+      `<p>These look like genuine regressions — 2024 had a right answer, 2025 does not.
+       Open a few.</p>` + caseCard(CASES.septa) +
+      `<p>Every model in both years gave <b>the same answer</b>. One 2024 model expanded
+       the acronym and was marked correct. <b>That is not a regression, it is a grading
+       coin-flip.</b> The next one looks like a real regression:</p>` + caseCard(CASES.michael) +
+      `<p>Check the dates before banking it: Gheorghe Buzdugan died in <b>1929</b>, King Michael of Romania in <b>2017</b>. The 2025 models are <b>right</b>; the answer key is wrong. Even the cases that look most like regressions have to be read one by one.</p>`)}
+    ${step(6,'script','So state it as a bound, not a number',['script','script'],
+      `<p>The answer-key flag cannot measure the contamination: it requires <b>every</b>
+       model to have given a short form, and here the whole mechanism is that one did not.
+       It fires on only a handful of the ${n0(worse)} — answering a different question.</p>
+       <p>Two string-similarity heuristics were tried while drafting this and
+       <b>both failed</b>: verbose 2024 answers contain the 2025 wrong answer as a
+       substring, so containment marks genuine regressions as artifacts. Both produced
+       a count; neither was published.</p>
+       <div class="card bad" style="margin:12px 0 0"><p style="margin:0">
+       <b>As graded, at most ${n0(worse)} of ${n0(em.n)} newly-hidden cases are genuine
+       regressions</b>, and hand-checking suggests meaningfully fewer. No test in this
+       project reliably measures the contamination — the artifact and the regression are
+       the same string pattern, and only reading the case separates them.</p></div>`)}
+  </div>
+
+  <div class="react"><b>WRITE THIS DOWN — 3.</b> You have now watched the project’s own
+    numbers get softer twice — ${n0(F.silent)} in walkthrough 1, ${n0(worse)} here. Does
+    that worry you, or does it read as the tool doing its job?</div>
+
+  <div class="card good">
+    <h4>The two walkthroughs are one finding from two directions</h4>
+    <p><b>Walkthrough 1:</b> at a fixed moment, “director of X” questions whose bare title
+      is already taken on Wikipedia fail silently ${(dirS.rate/dirU.rate).toFixed(1)}× as often
+      as those whose title is unique.<br>
+      <b>Walkthrough 2:</b> in the cases read here, across a generation, models drift <em>toward</em> the famous
+      answer, and their disagreement disappears with it.</p>
+    <p style="margin:0;font-size:17px;color:var(--ink)"><b>The upgrade (newer and larger at once, so the two cannot be separated)
+      mostly did not create new ignorance. It made existing ignorance agree with itself.</b></p>
+  </div>
+
+  <h3>What this proves about the tool — and what it does not</h3>
+  <p><b>Does:</b> steps 2, 3 and 5 of walkthrough 2 are pure interface, and step 1 only
+    reads the tool's generation chart. Holding one question
+    fixed and flipping the generation is not something a table does, and the two cases
+    carrying that path are individually surprising rather than aggregate facts. This is the
+    strongest evidence in the project that the tool is <em>necessary</em> rather than
+    decorative.</p>
+  <p><b>Every step that is a link is exactly reproducible.</b> The tool's whole view —
+    colouring, legend filter, dataset selection, and the box in <em>data</em> coordinates
+    rather than pixels — lives in the URL, so the same link is the same screen on any
+    display at any size. That also fixes something the evaluation needed: three reviewers
+    can be given provably identical starting views instead of three descriptions of one.
+    The <b>Copy link to this view</b> button in the map sidebar makes one from wherever
+    you are.</p>
+  <p><b>Does not:</b> the counts are scripts. The tool shows you <em>a</em> case; it will
+    not tell you how many cases look like that one. That division is legitimate — a
+    visual-analytics tool is judged on supporting <b>discovery</b>, and confirmation is a
+    separate act — but a walkthrough has to say which is which.</p>
+
+  <hr>
+
+  <h2 id="numbers">Every number on this page, and its source</h2>
+  <p>All statistics are read from <span class="mono">summary.json</span> when this page
+    loads. Nothing is typed. Case transcripts are literal quotations of fixed model
+    answers, copied from the tool's <span class="mono">data.json</span> — measurements
+    derive, quotations do not.</p>
+  <table>
+    <tr><th>figure</th><th>value</th><th>source</th></tr>
+    <tr><td>corpus · blind spots</td><td class="n">${n0(S.corpus.analysed)} · ${n0(F.silent)}</td><td>funnel</td></tr>
+    <tr><td>corpus blind-spot rate</td><td class="n">${pc(base,2)}</td><td>walk.base</td></tr>
+    <tr><td>director of X — unique title</td><td class="n">${pc(dirU.rate,2)} of ${n0(dirU.n)}</td><td>walk.director</td></tr>
+    <tr><td>director of X — shared title</td><td class="n">${pc(dirS.rate,2)} of ${n0(dirS.n)}</td><td>walk.director</td></tr>
+    <tr><td>generation split</td><td class="n">${n0(R3.healed)} / ${n0(R3.persisted)} / ${n0(R3.emerged)}</td><td>rq3</td></tr>
+    <tr><td>already all-wrong in 2024</td><td class="n">${n0(em.already_allwrong)} of ${n0(em.n)}</td><td>walk.emerged</td></tr>
+    <tr><td>answer-key flags</td><td class="n">${n0(S.keyflags)}</td><td>keyflags</td></tr>
+    <tr><td>defects found and fixed</td><td class="n">${S.defects}</td><td>ISSUES.md</td></tr>
+  </table>
+  <p class="muted" style="font-size:13.5px">Two figures on this page are not read
+    from summary.json. The <b>72 cases / 28 &ldquo;director of&rdquo;</b> in step 3
+    depend on the box, so they are a property of that one link rather than of the
+    corpus; they were re-derived from <span class="mono">data.json</span> on
+    2026-09-27, after the correction pass removed ${n0(S.corpus.duplicates)} duplicate
+    questions, by applying the same coordinates, and did not move. The clustering
+    measure in step 2 comes from <span class="mono">rq2_localize.parquet</span>,
+    which summary.json does not carry; it used to be typed here as a percentage and
+    two distances, went stale when the duplicates were removed, and is now stated
+    without a number &mdash; the same drift ISSUES #57 recorded for this note a
+    month earlier.</p>
+  `;
+}
+
+fetch('summary.json')
+  .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); })
+  .then(render)
+  .catch(() => {
+    document.getElementById('app').innerHTML =
+      '<div class="err"><b>summary.json did not load.</b> Serve this folder over HTTP ' +
+      '(<span class="mono">python -m http.server</span>) rather than opening the file ' +
+      'directly — every number on this page is read from it at load.</div>';
+  });
+</script>
+</body>
+</html>

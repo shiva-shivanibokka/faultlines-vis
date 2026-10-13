@@ -1,0 +1,310 @@
+# FaultLines — single source of truth.
+# Every module reads from here. Change a number here, not in the code.
+
+seed: 42
+
+# ---------------------------------------------------------------- datasets
+# Level 1. n_pilot is what run_pilot.py uses; n_full is the eventual run.
+# LOCKED 2026-07-27 on measured evidence. All figures from
+# scripts/probe_datasets.py --n 60 (240 answers per dataset, hosted ensemble).
+# The four complement each other by DIFFICULTY, which is the point: an AUC needs
+# both questions the ensemble gets right and questions it gets wrong.
+datasets:
+  triviaqa:
+    hf_id: mandarjoshi/trivia_qa
+    subset: rc.nocontext            # closed-book: no passage handed to the model
+    split: validation
+    n_pilot: 100
+    n_full: 17944
+    # acc 70.8% / all-wrong 11.7% -- the easy end. Short answers with rich alias
+    # lists grade on the exact/alias tiers alone, so it adds volume WITHOUT
+    # adding grading risk (no NLI, no low-margin band).
+    role: "volume + the positives -> without these the AUC has no negatives"
+  popqa:
+    hf_id: akariasai/PopQA
+    split: test
+    n_pilot: 100
+    n_full: 14267
+    # acc 39.2% / all-wrong 35.0%. IRREPLACEABLE: the only dataset here carrying
+    # popularity metadata (s_pop = Wikipedia pageviews). RQ2's popularity control
+    # -- the result that defuses "it's just Kandpal 2023" -- cannot be computed
+    # without it.
+    role: "obscurity arm -> RQ2 popularity control, RQ4 positive control"
+  halueval:
+    hf_id: pminervini/HaluEval
+    subset: qa
+    split: data
+    n_pilot: 100
+    n_full: 10000
+    # acc 45.4% / all-wrong 41.7% -- the BEST profile measured: mid accuracy and
+    # the highest all-wrong rate, i.e. the richest source of silent-consensus
+    # candidates. Structured like TruthfulQA (right_answer + hallucinated_answer)
+    # at 12x the size, which is what lets TruthfulQA stop carrying statistics.
+    role: "misinformation/hallucination arm AT SCALE -> Audit"
+  truthfulqa:
+    hf_id: truthfulqa/truthful_qa   # bare "truthful_qa" no longer resolves
+    subset: generation
+    split: validation
+    n_pilot: 100
+    n_full: 817
+    non_adversarial: true           # drop GPT-3-adversarial rows (confounds RQ3 persistence)
+    # 817 rows, fewer after the non-adversarial filter. Too small to carry a
+    # statistical claim -- and it no longer has to, halueval took that job. Kept
+    # for the one thing nothing else has: TruthfulQA's own cause taxonomy
+    # (Misconceptions / Conspiracies / Superstitions / Health / Politics), a free
+    # EXTERNAL check on whether Diagnose's cause labels track anything real.
+    # Report it qualitatively; do not lean on a TruthfulQA AUC.
+    role: "misconception probe -> qualitative + taxonomy validation ONLY"
+
+# REJECTED, with the measurement that rejected them (kept so nobody re-litigates):
+#   simpleqa  acc 25.4%, still floored. But WHY it improved is itself a finding:
+#             91% wrong on the 7-9B local ensemble -> 74.6% wrong here. The floor
+#             effect was SCALE-dependent, not a property of the dataset. Dropped
+#             because it is the smallest set and adds least, not because it broke.
+#   hotpotqa  acc 36.2% overall but splits badly: `comparison` rows are 66.7%
+#             yes/no golds (meaning-clustering degenerates exactly as on a
+#             classification dataset), `bridge` rows only 28.3%. OPTIONAL later as
+#             a bridge-only arm testing a DIFFERENT failure mode (multi-hop
+#             reasoning vs knowledge recall) to support Diagnose.
+#   liar2     no question and no gold answer string -- just `statement` + a 0-5
+#   fever     `label`; FEVER likewise (SUPPORTED/REFUTED/NEI). Both are claim
+#             CLASSIFICATION: the answer space collapses to 2-3 discrete labels,
+#             so semantic clustering is meaningless and "all four agree" happens
+#             ~50% of the time by chance -- which would gut silent consensus.
+#             Rejected on SCHEMA, not on accuracy.
+#   AbstentionBench  ships a datasets SCRIPT (unsupported in datasets>=4).
+
+# ---------------------------------------------------------------- ensemble
+# Level 2. Four makers, not four models -- the axis is decorrelated errors.
+# Pull these before the first run:  python -m faultlines.generate --pull
+# ACTIVE ensemble. Every module reads this key, so the provider flip is only
+# complete when this list matches the active endpoint -- sending "llama3.1:8b"
+# to DeepInfra is a 400.
+# Matched on ACTIVE parameters (what actually runs per token), not on the number
+# in the name: 17B / 22B / 24B / 27B. A size-matched all-DENSE four-maker set
+# does not exist among models that serve logprobs -- Google caps at gemma-3-27b,
+# Mistral has exactly one usable model, and every usable Qwen is MoE.
+ensemble:
+  - {name: "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8", maker: "Meta"}     # 17B active
+  - {name: "Qwen/Qwen3-235B-A22B-Instruct-2507",                maker: "Alibaba"}  # 22B active
+  - {name: "mistralai/Mistral-Small-3.2-24B-Instruct-2506",     maker: "Mistral"}  # 24B dense
+  - {name: "google/gemma-3-27b-it",                             maker: "Google"}   # 27B dense
+
+# The local 7-9B ensemble that produced the frozen 300-question pilot. Kept so
+# those numbers stay reproducible -- they are a SEPARATE experiment from the
+# hosted run, not a superseded version of it.
+ensemble_local:
+  - {name: "llama3.1:8b",     maker: "Meta"}
+  - {name: "qwen2.5:7b",      maker: "Alibaba"}
+  - {name: "mistral:7b",      maker: "Mistral"}
+  - {name: "gemma2:9b",       maker: "Google"}
+
+# Hosted ensemble decision 2026-07-27 -- see DECISIONS.md.
+# To use: rename this key to `ensemble` and rename the local block above to
+# `ensemble_local`. Four makers still -- the axis is decorrelated errors, and
+# going bigger ALSO widens training-recipe diversity, which the four small
+# models did not have (they share web corpora and GPT-4-style distillation,
+# a live confound for the independence claim).
+#
+# !! VERIFY these IDs against the provider's current model list before a paid
+# !! run -- hosted catalogues churn and a stale ID fails the whole pass.
+
+# NOTE ensemble_hosted was DELETED 2026-07-27. It had drifted from `ensemble`
+# (held Qwen3-Next while `ensemble` held Qwen3-235B), and scripts/check_provider.py
+# was validating it -- so the gate meant to prevent a bad paid run was checking
+# models that would never run. check_provider.py now takes --ensemble and defaults
+# to the same key generate.py uses. Do not reintroduce a second model list.
+
+
+# ---------------------------------------------------------------- Track
+# Gen-2 rebuilt HOSTED, so the generation comparison against `ensemble` (gen-3)
+# holds provider, precision, maker count AND ensemble size constant. Only the
+# generation changes. These are the same four models as ensemble_local, served
+# at full precision instead of local 4-bit.
+ensemble_gen2:
+  - {name: "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo", maker: "Meta"}
+  # DeepInfra serves this one with thinking ON: it emits a <think> block that
+  # max_tokens=64 truncates before the answer ever appears, so the stripped
+  # answer is EMPTY -- every Qwen row would grade wrong and the gen-2 arm would
+  # look broken, with no error raised. enable_thinking=false fixes it.
+  # Do NOT hoist this flag to the other models: Qwen3-235B returns empty WITH it.
+  - {name: "Qwen/Qwen2.5-7B-Instruct", maker: "Alibaba",
+     params: {chat_template_kwargs: {enable_thinking: false}}}
+  - {name: "mistralai/Mistral-7B-Instruct-v0.3",          maker: "Mistral"}
+  - {name: "google/gemma-2-9b-it",                        maker: "Google"}
+
+# The confound-breaker. One maker, one provider, one precision -- so the ONLY
+# things that vary are generation (down a column) and size (across a row):
+#
+#            ~9-12B            27B
+#   Gemma 2  gemma-2-9b-it     gemma-2-27b-it
+#   Gemma 3  gemma-3-12b-it    gemma-3-27b-it
+#
+# gemma-2-27b -> gemma-3-27b  = generation, size FIXED
+# gemma-2-9b  -> gemma-2-27b  = size, generation FIXED
+# Without this, "blind spots healed" cannot be attributed to either axis, because
+# the ensemble-level arms change generation and size together (7-9B -> 17-27B).
+ensemble_gemma_ladder:
+  - {name: "google/gemma-2-9b-it",  maker: "Google", gen: 2, size: 9}
+  - {name: "google/gemma-2-27b-it", maker: "Google", gen: 2, size: 27}
+  - {name: "google/gemma-3-12b-it", maker: "Google", gen: 3, size: 12}
+  - {name: "google/gemma-3-27b-it", maker: "Google", gen: 3, size: 27}
+
+# DROPPED 2026-07-27 -- gen-1 (Llama2-7B / Qwen1.5-7B / Mistral-v0.1, local Q4).
+# Three confounds at once and no way to fix them:
+#   1. THREE makers vs four in gen-2/gen-3. Silent consensus is "all models agree
+#      and all are wrong" -- three agreeing is mechanically more likely than four,
+#      so the comparison measures ensemble SIZE as much as generation. This also
+#      means the earlier "8 of 9 healed" result is itself contaminated: part of
+#      that drop is just 3 models -> 4 models.
+#   2. Local 4-bit vs hosted full precision.
+#   3. Cannot be rebuilt hosted: every Qwen 1.5 404s and Gemma did not exist in
+#      2023, so a hosted gen-1 would be two makers.
+# Kept for the appendix only, with all three caveats stated. Two clean points
+# beat three contaminated ones.
+ensemble_gen1_DROPPED:
+  - {name: "llama2:7b",    maker: "Meta"}
+  - {name: "qwen:7b",      maker: "Alibaba"}   # Qwen 1.5 7B
+  - {name: "mistral:v0.1", maker: "Mistral"}
+
+generation:
+  # ACTIVE provider. Flipped to hosted 2026-07-27 (validated: check_provider.py).
+  # To go back to the laptop, restore the two local_* values below.
+  endpoint: "https://api.deepinfra.com/v1/openai/chat/completions"
+  api_key_env: "DEEPINFRA_API_KEY"
+
+  # The local path, kept so the original 300-question pilot stays reproducible.
+  local_endpoint: "http://localhost:11434/v1/chat/completions"
+  local_api_key_env: ""     # Ollama needs no key; empty = send no auth header
+
+  # Kept as live keys rather than commented-out lines so scripts/check_provider.py
+  # can read them and smoke-test the hosted path BEFORE the switch is made.
+  hosted_endpoint: "https://api.deepinfra.com/v1/openai/chat/completions"
+  hosted_api_key_env: "DEEPINFRA_API_KEY"
+
+  # RETRACTED: an earlier version of this file set baseline_model to a Together
+  # model OUTSIDE the ensemble. That would have broken the head-to-head. The
+  # baseline's whole point is "four models once vs ONE OF THOSE MODELS four
+  # times" -- the single model must come from the ensemble, or the result
+  # measures model choice rather than model diversity. baseline.py already does
+  # the right thing (run_on_all_models: true -> SE on all four, report the
+  # strongest), so no baseline_* endpoint override should exist here.
+  #
+  # Together's credit therefore has no role in the baseline. Its candidate use
+  # is Track's older-generation arms, which compare item-level agreement and
+  # correctness and so do NOT need logprobs -- a much wider set of Together
+  # models qualifies. Needs its own check_provider-style pass before use.
+  #
+  # Together / Fireworks / DeepInfra / OpenAI all serve this same
+  # /v1/chat/completions shape WITH logprobs, which is the only reason the
+  # switch is two lines. Do NOT swap in a provider without logprobs --
+  # confidence = exp(mean log p) is the white-box edge and RQ1 dies without it.
+  # Anthropic's API does not expose token logprobs.
+  temperature: 0.0          # deterministic for the ensemble arm
+  max_tokens: 64
+  timeout_s: 180
+  # Concurrency for the hosted path. Measured 2026-07-27 on Qwen3-235B with
+  # DISTINCT questions (identical questions are cached provider-side and give a
+  # misleadingly fast number): 12 workers -> 6.9 gen/s, 24 workers -> 25.9 gen/s.
+  # The bottleneck is per-request latency, not provider throughput, so the run
+  # was badly under-parallelised at 12. Checkpoint I/O is negligible (~4 min
+  # across the whole corpus), so it is safe to raise this.
+  max_workers: 24
+  checkpoint_every: 200
+  # Per-dataset, because the answer keys have different SHAPES. PopQA and
+  # SimpleQA golds are short spans ("Betty Comden", "20"); TruthfulQA golds are
+  # full sentences ("Bears don't wear anything when they fight in the wild").
+  # Prompting tersely on TruthfulQA would make the grader mark correct answers
+  # wrong -- an artifact of prompt/key mismatch, not a real error.
+  system_prompt:
+    default: "Answer the question with the shortest correct answer. No explanation, no full sentence."
+    truthfulqa: "Answer the question in one short, complete sentence. Be truthful; if a common belief is false, say what is actually true."
+
+# ---------------------------------------------------------------- semantics
+# One sentence transformer, used for grading, clustering AND the baseline.
+# Same model + same threshold everywhere = no method advantage smuggled in.
+semantics:
+  model: "sentence-transformers/all-MiniLM-L6-v2"
+  grade_threshold: 0.80     # Level 3, tier 3: semantic match counts as correct
+  cluster_threshold: 0.80   # Level 4 + Level 6: same meaning = same cluster
+
+# ---------------------------------------------------------------- baseline
+# Level 6. Matched budget: 4 generations per question in BOTH arms, so the
+# only variable is whether they come from one model or four.
+baseline:
+  temperature: 1.0          # the value used in the Semantic Entropy papers
+  n_samples: 4
+  run_on_all_models: true   # report the strongest single model, not an arbitrary one
+
+# ---------------------------------------------------------------- map
+# Level 5. Position comes from question wording ONLY -- never from the
+# disagreement score. That non-circularity is what makes clustering a result.
+umap:
+  n_neighbors: 15
+  min_dist: 0.1
+  n_components: 2
+
+paths:
+  raw: "data/raw"
+  interim: "data/interim"
+  processed: "data/processed"
+
+# ---------------------------------------------------------------- providers
+# Named provider endpoints, selectable with --provider. Added 2026-07-28 after
+# DeepInfra was found serving DIFFERENT MODELS under delisted names (ISSUES #31):
+# google/gemma-2-27b-it returned answers 99.6% identical to gemma-3-27b-it, and
+# gemma-2-9b-it was identical to gemma-3-12b-it. Rebuilding the gen-2 arm on a
+# SECOND PROVIDER is the only way to tell a real generation gap from one
+# provider's substitution policy -- and cross-provider agreement becomes
+# evidence in its own right.
+provider_deepinfra:
+  endpoint: "https://api.deepinfra.com/v1/openai/chat/completions"
+  api_key_env: "DEEPINFRA_API_KEY"
+
+provider_together:
+  endpoint: "https://api.together.xyz/v1/chat/completions"
+  api_key_env: "TOGETHER_API_KEY"
+
+# gen-2 on Together. Same four makers, same parameter class as ensemble_gen2,
+# but Together lists every one of them -- including both gemma-2 sizes, which
+# DeepInfra has withdrawn. Model IDs are Together's own spellings.
+ensemble_gen2_together:
+  - {name: "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo", maker: "Meta"}
+  - {name: "Qwen/Qwen2.5-7B-Instruct-Turbo",              maker: "Alibaba"}
+  - {name: "mistralai/Mistral-7B-Instruct-v0.3",          maker: "Mistral"}
+  - {name: "google/gemma-2-9b-it",                        maker: "Google"}
+
+# The 2x2 ladder, rebuilt on Together. DeepInfra cannot serve this at all:
+# its gemma-2 entries alias to gemma-3, so two of the four cells were duplicates.
+ensemble_gemma_ladder_together:
+  - {name: "google/gemma-2-9b-it",  maker: "Google", gen: 2, size: 9}
+  - {name: "google/gemma-2-27b-it", maker: "Google", gen: 2, size: 27}
+  - {name: "google/gemma-3-12b-it", maker: "Google", gen: 3, size: 12}
+  - {name: "google/gemma-3-27b-it", maker: "Google", gen: 3, size: 27}
+
+# Local Ollama. Added 2026-07-28 as the ONLY trustworthy source of gen-2 models
+# after ISSUES #31: DeepInfra aliases them to gen-3, Together will not serve them
+# serverless. Ollama models are content-addressed -- the digest is computed from
+# the weights, so substitution is detectable by construction, not by probing.
+#   llama3.1:8b 46e0c10c039e · qwen2.5:7b 845dbda0ea48
+#   mistral:7b  6577803aa9a0 · gemma2:9b  ff02c3702f32
+provider_local:
+  endpoint: "http://localhost:11434/v1/chat/completions"
+  api_key_env: ""
+
+# The SAME four models at 8-bit. Exists to answer the open question "does 4-bit
+# quantization degrade the disagreement signal?" (ISSUES) with a controlled
+# experiment: identical weights, identical questions, ONLY precision differs.
+#
+# 8-bit is also the honest target rather than fp16. The hosted gen-3 ensemble is
+# not full precision either -- Llama-4-Maverick-17B-128E-Instruct-FP8 is 8-bit by
+# name, and the other three providers do not publish their serving precision. So
+# "match full precision" is not achievable; matching ~8-bit is, and it is much
+# closer than 4-bit. fp16 would be 14-18 GB per model against 8 GB of VRAM,
+# i.e. mostly CPU-resident and ~10-20x slower, for a difference we cannot even
+# verify on the other side of the comparison.
+ensemble_local_q8:
+  - {name: "llama3.1:8b-instruct-q8_0",        maker: "Meta"}
+  - {name: "qwen2.5:7b-instruct-q8_0",         maker: "Alibaba"}
+  - {name: "mistral:7b-instruct-v0.3-q8_0",    maker: "Mistral"}
+  - {name: "gemma2:9b-instruct-q8_0",          maker: "Google"}
