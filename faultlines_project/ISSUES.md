@@ -3080,15 +3080,17 @@ propagated to chapters 5, 7 and 8, the exporter (`summary.json.artifact`), the
 claims table, and the deck. `scripts/check_writeup.py` now verifies the new
 figures in all three chapters, so they cannot drift apart.
 
-**Closed 2026-08-26 — measured, and the argument below was wrong.** The
-adjudication *was* run on the 2024 arm (`scripts/adjudicate_blind.py --arm
-2024`; PLAN task 4.1; RESULTS Finding 12). It refuted the premise this item
-rested on: grading strictness is **not** uniform across model generations —
-15.71% in the 2024 arm against 20.59% in the 2025 arm, p = 0.005. The RQ3
-comparison was corrected to follow the measurement instead of the assumption.
-The paragraph that stood here claimed the comparison survived *by argument*
-because a uniform strictness would cancel. It does not cancel. Do not quote
-that claim.
+**Closed 2026-08-26 — measured, and the argument this item rested on was
+wrong.** The adjudication *was* run on the 2024 arm
+(`scripts/adjudicate_blind.py --arm 2024`; RESULTS Finding 12).
+It refuted the premise: grading strictness is **not** uniform across model
+generations. On the current deduplicated figures (Qwen3-235B judge, superseding
+the 2026-08-26 numbers — see the supersession banner on Finding 12) the artifact
+rate is **15.19% [12.9%, 17.8%] · 125/823 in the 2024 arm against 21.05%
+[18.6%, 23.8%] · 200/950 in 2025, a gap of +5.9 pts**. The RQ3 comparison was
+corrected to follow the measurement instead of the assumption. The paragraph
+that stood here claimed the comparison survived *by argument*, because a uniform
+strictness would cancel. It does not cancel. Do not quote that claim.
 
 ---
 

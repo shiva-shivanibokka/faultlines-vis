@@ -185,7 +185,6 @@ question without running a model.
 | `DECISIONS.md` | every decision + the evidence that drove it |
 | `RESULTS.md` | every measured number |
 | `ISSUES.md` | every problem hit, with a status table at the top |
-| `AUDIT.md` | the pre-run codebase audit (13 findings, all fixed) |
 | `DATASET_ANALYSIS.md` | why TruthfulQA/SimpleQA score low, and why more data won't fix it |
 
 One caveat worth knowing before trusting a TruthfulQA number: **24% of its
