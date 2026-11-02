@@ -3080,10 +3080,15 @@ propagated to chapters 5, 7 and 8, the exporter (`summary.json.artifact`), the
 claims table, and the deck. `scripts/check_writeup.py` now verifies the new
 figures in all three chapters, so they cannot drift apart.
 
-**Open, and named as the most important item in the thesis:** the same
-adjudication has NOT been run on the 2024 arm. The RQ3 comparison is *argued* to
-survive because both arms share one grader and a uniform strictness cancels.
-That is an argument. The measurement costs about a thousand calls.
+**Closed 2026-08-26 — measured, and the argument below was wrong.** The
+adjudication *was* run on the 2024 arm (`scripts/adjudicate_blind.py --arm
+2024`; PLAN task 4.1; RESULTS Finding 12). It refuted the premise this item
+rested on: grading strictness is **not** uniform across model generations —
+15.71% in the 2024 arm against 20.59% in the 2025 arm, p = 0.005. The RQ3
+comparison was corrected to follow the measurement instead of the assumption.
+The paragraph that stood here claimed the comparison survived *by argument*
+because a uniform strictness would cancel. It does not cancel. Do not quote
+that claim.
 
 ---
 
