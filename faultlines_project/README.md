@@ -3,6 +3,12 @@
 Cross-model disagreement as a hallucination signal — and a map of *where* the
 faults are. Capstone, SFSU M.S. Data Science & Artificial Intelligence.
 
+> **On citations in this shard.** `RESULTS.md`, `ISSUES.md` and `DECISIONS.md`
+> are the project's working records and they cite internal planning documents
+> (`PLAN.md`, `AUDIT.md`, `ASSESSMENT.md`, `TODO.md`, `EVAL_RECRUITING.md`) that
+> are not published here. Those citations are kept as written so the record is
+> not silently altered; they simply will not resolve in this repository.
+
 Slide deck: <https://faultlines-peach.vercel.app> ·
 tool: <https://faultlines-tool.vercel.app> ·
 method, level by level: <https://faultlines-peach.vercel.app/pipeline.html>
